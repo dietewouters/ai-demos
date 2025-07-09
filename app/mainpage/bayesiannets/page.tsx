@@ -1,8 +1,23 @@
-export default function Page() {
+import BayesianNetworkDemo from "@/components/bayesiannets/bayesian-network-demo";
+import ExerciseNetworkDemo from "@/components/bayesiannets/demo-exercises";
+
+export default function Home() {
   return (
-    <p className="mt-2 text-lg">
-      This page will contain the demos for the exercise session about Bayesian
-      nets.
-    </p>
+    <main className="container max-w-6xl mx-auto p-4 py-8">
+      <h1 className="text-3xl font-bold mb-6">
+        This page contains demo's for the exercise session about Bayesian
+        Networks.
+      </h1>
+      <h1 className="text-xl mb-6">
+        To start, there is a general demo of a Bayesian Network. You can play a
+        bit with it to understand how it works.
+      </h1>
+      <BayesianNetworkDemo />
+      <h1 className="text-xl mb-6">
+        In the next section, you can find a demo of the exercise about the Fred
+        LISP dilemma.
+      </h1>
+      <ExerciseNetworkDemo />
+    </main>
   );
 }
