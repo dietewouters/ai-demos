@@ -1,17 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -21,17 +12,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Plus, Info, Check, X } from "lucide-react";
-import ExplanationPanel from "./explanation-panel";
+import { Check, X } from "lucide-react";
 import CustomProbabilitySlider from "./custom-probability-slider";
 import { exerciseNetworks } from "./exercise-networks";
+
+interface BayesianNetworkDemoProps {
+  networkName: keyof typeof exerciseNetworks;
+}
 
 // Force-directed graph layout algoritme
 const applyForceDirectedLayout = (
@@ -47,13 +34,11 @@ const applyForceDirectedLayout = (
     for (let i = 0; i < nodesCopy.length; i++) {
       nodesCopy[i].fx = 0;
       nodesCopy[i].fy = 0;
-
       for (let j = 0; j < nodesCopy.length; j++) {
         if (i !== j) {
           const dx = nodesCopy[i].x - nodesCopy[j].x;
           const dy = nodesCopy[i].y - nodesCopy[j].y;
           const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-
           // Afstotende kracht (omgekeerd evenredig met afstand)
           const force = (k * k) / distance;
           nodesCopy[i].fx += (dx / distance) * force;
@@ -73,7 +58,6 @@ const applyForceDirectedLayout = (
           const dx = nodesCopy[i].x - nodesCopy[parentIndex].x;
           const dy = nodesCopy[i].y - nodesCopy[parentIndex].y;
           const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-
           // Aantrekkende kracht (evenredig met afstand)
           const force = (distance * distance) / k;
           nodesCopy[i].fx -= (dx / distance) * force;
@@ -86,10 +70,10 @@ const applyForceDirectedLayout = (
 
     // Update posities
     for (let i = 0; i < nodesCopy.length; i++) {
+      if (nodesCopy[i].fixed) continue;
       const scale = 0.1; // Schaalfactor om grote sprongen te voorkomen
       nodesCopy[i].x += nodesCopy[i].fx * scale;
       nodesCopy[i].y += nodesCopy[i].fy * scale;
-
       // Begrens posities binnen het zichtbare gebied
       nodesCopy[i].x = Math.max(150, Math.min(850, nodesCopy[i].x));
       nodesCopy[i].y = Math.max(150, Math.min(450, nodesCopy[i].y));
@@ -108,9 +92,9 @@ const getProbabilityColor = (probability: number) => {
   return "bg-red-100 border-red-500";
 };
 
-export default function BayesianNetworkDemo() {
-  const [selectedNetworkId, setSelectedNetworkId] =
-    useState<keyof typeof exerciseNetworks>("LISP");
+export default function BayesianNetworkDemo({
+  networkName,
+}: BayesianNetworkDemoProps) {
   const [network, setNetwork] = useState<{
     nodes: {
       id: string;
@@ -126,27 +110,19 @@ export default function BayesianNetworkDemo() {
     Record<string, { true: number; false: number }>
   >({});
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [newNodeData, setNewNodeData] = useState<{
-    name: string;
-    parents: Record<string, boolean>;
-  }>({ name: "", parents: {} });
-  const [showAddNodeModal, setShowAddNodeModal] = useState(false);
-  const [showExplanationModal, setShowExplanationModal] = useState(false);
 
   // Laad het geselecteerde netwerk
   useEffect(() => {
-    if (selectedNetworkId in exerciseNetworks) {
+    if (networkName in exerciseNetworks) {
       const newNetwork = JSON.parse(
-        JSON.stringify(exerciseNetworks[selectedNetworkId])
+        JSON.stringify(exerciseNetworks[networkName])
       );
-
       // Pas force-directed layout toe
       newNetwork.nodes = applyForceDirectedLayout(newNetwork.nodes);
-
       setNetwork(newNetwork);
       setSelectedNode(null);
     }
-  }, [selectedNetworkId]);
+  }, [networkName]);
 
   // Pas force-directed layout toe bij initialisatie
   useEffect(() => {
@@ -181,7 +157,6 @@ export default function BayesianNetworkDemo() {
             network,
             result
           );
-
           let probTrue = 0;
           let totalWeight = 0;
 
@@ -227,7 +202,6 @@ export default function BayesianNetworkDemo() {
       return [{ config: "", weight: 1 }];
 
     const configurations = [];
-
     // Voor eenvoud behandelen we alleen het geval met 1 of 2 ouders in deze demo
     if (node.parents.length === 1) {
       const parent = node.parents[0];
@@ -275,7 +249,6 @@ export default function BayesianNetworkDemo() {
     newProb: number
   ) => {
     const updatedNetwork = { ...network };
-
     if (!context) {
       // Update voor root-nodes
       updatedNetwork.probabilities[nodeId] = {
@@ -294,24 +267,20 @@ export default function BayesianNetworkDemo() {
             ? newProb
             : updatedNetwork.probabilities[nodeId][context].false,
       };
-
       // Normaliseren (zorg ervoor dat true + false = 1)
       const sum =
         updatedNetwork.probabilities[nodeId][context].true +
         updatedNetwork.probabilities[nodeId][context].false;
-
       if (sum !== 1) {
         updatedNetwork.probabilities[nodeId][context].true /= sum;
         updatedNetwork.probabilities[nodeId][context].false /= sum;
       }
     }
-
     setNetwork(updatedNetwork);
   };
 
   const setEvidence = (nodeId: string, value: boolean) => {
     const updatedNetwork = { ...network };
-
     if (network.evidence[nodeId] === value) {
       // Als dezelfde waarde opnieuw wordt geklikt, verwijder evidence
       const { [nodeId]: removed, ...rest } = updatedNetwork.evidence;
@@ -323,107 +292,7 @@ export default function BayesianNetworkDemo() {
         [nodeId]: value,
       };
     }
-
     setNetwork(updatedNetwork);
-  };
-
-  const handleAddNode = () => {
-    if (!newNodeData.name.trim()) return;
-
-    // Generate a unique ID
-    const newId = newNodeData.name.toLowerCase().replace(/\s+/g, "_");
-
-    // Check if ID already exists
-    if (network.nodes.some((node) => node.id === newId)) {
-      alert("Een node met deze naam bestaat al.");
-      return;
-    }
-
-    // Get selected parents
-    const parents = Object.entries(newNodeData.parents)
-      .filter(([_, selected]) => selected)
-      .map(([id]) => id);
-
-    // Create new node with initial position
-    const newNode = {
-      id: newId,
-      name: newNodeData.name,
-      parents,
-      x: 300 + Math.random() * 100 - 50,
-      y: 200 + Math.random() * 100 - 50,
-    };
-
-    // Create probability tables
-    const newProbabilities = { ...network.probabilities };
-
-    if (parents.length === 0) {
-      // Root node
-      newProbabilities[newId] = { true: 0.5, false: 0.5 };
-    } else if (parents.length === 1) {
-      // One parent
-      newProbabilities[newId] = {
-        [`${parents[0]}=true`]: { true: 0.5, false: 0.5 },
-        [`${parents[0]}=false`]: { true: 0.5, false: 0.5 },
-      };
-    } else if (parents.length === 2) {
-      // Two parents
-      newProbabilities[newId] = {
-        [`${parents[0]}=true,${parents[1]}=true`]: { true: 0.5, false: 0.5 },
-        [`${parents[0]}=true,${parents[1]}=false`]: { true: 0.5, false: 0.5 },
-        [`${parents[0]}=false,${parents[1]}=true`]: { true: 0.5, false: 0.5 },
-        [`${parents[0]}=false,${parents[1]}=false`]: { true: 0.5, false: 0.5 },
-      };
-    }
-
-    // Update network with new node
-    const updatedNodes = [...network.nodes, newNode];
-
-    // Apply force-directed layout to prevent overlapping
-    const layoutedNodes = applyForceDirectedLayout(updatedNodes);
-
-    // Update network
-    setNetwork({
-      ...network,
-      nodes: layoutedNodes,
-      probabilities: newProbabilities,
-    });
-
-    // Reset form and close modal
-    setNewNodeData({ name: "", parents: {} });
-    setShowAddNodeModal(false);
-  };
-
-  const handleDeleteNode = (nodeId: string) => {
-    // Filter out the node
-    const updatedNodes = network.nodes.filter((node) => node.id !== nodeId);
-
-    // Remove any references to this node as a parent
-    updatedNodes.forEach((node) => {
-      node.parents = node.parents.filter((id) => id !== nodeId);
-    });
-
-    // Create a copy of probabilities and evidence
-    const updatedProbabilities = { ...network.probabilities };
-    const updatedEvidence = { ...network.evidence };
-
-    // Remove probability entries
-    delete updatedProbabilities[nodeId];
-
-    // Remove evidence if it exists
-    delete updatedEvidence[nodeId];
-
-    // Update network
-    setNetwork({
-      ...network,
-      nodes: updatedNodes,
-      probabilities: updatedProbabilities,
-      evidence: updatedEvidence,
-    });
-
-    // If the selected node was deleted, clear selection
-    if (selectedNode === nodeId) {
-      setSelectedNode(null);
-    }
   };
 
   const getNodeDisplayName = (nodeId: string) => {
@@ -437,7 +306,6 @@ export default function BayesianNetworkDemo() {
     if (node.parents.length === 0) {
       // Root node
       const probs = network.probabilities[nodeId];
-
       return (
         <div className="space-y-4">
           <h3 className="text-lg font-medium">Prior Kans voor {node.name}</h3>
@@ -449,22 +317,11 @@ export default function BayesianNetworkDemo() {
               }
             />
           </div>
-
-          <div className="flex justify-end mt-6">
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => handleDeleteNode(nodeId)}
-            >
-              <X className="h-4 w-4 mr-2" /> Verwijder Node
-            </Button>
-          </div>
         </div>
       );
     } else {
       // Node with parents
       const parentNames = node.parents.map((p) => getNodeDisplayName(p));
-
       // Generate all possible parent combinations
       const parentCombinations: string[] = [];
       const generateCombinations = (
@@ -478,7 +335,6 @@ export default function BayesianNetworkDemo() {
           }
           return;
         }
-
         generateCombinations(parents, currentIndex + 1, [
           ...currentCombo,
           `${parents[currentIndex]}=true`,
@@ -499,7 +355,6 @@ export default function BayesianNetworkDemo() {
           <div className="text-sm mb-2">
             Elke rij toont P({node.name} | ouders)
           </div>
-
           <div className="overflow-auto max-h-[400px]">
             <Table>
               <TableHeader>
@@ -514,7 +369,6 @@ export default function BayesianNetworkDemo() {
                 {parentCombinations.map((combo) => {
                   const conditions = combo.split(",");
                   const probTable = network.probabilities[nodeId][combo];
-
                   return (
                     <TableRow key={combo}>
                       {conditions.map((cond) => {
@@ -559,16 +413,6 @@ export default function BayesianNetworkDemo() {
               </TableBody>
             </Table>
           </div>
-
-          <div className="flex justify-end mt-6">
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => handleDeleteNode(nodeId)}
-            >
-              <X className="h-4 w-4 mr-2" /> Verwijder Node
-            </Button>
-          </div>
         </div>
       );
     }
@@ -588,7 +432,6 @@ export default function BayesianNetworkDemo() {
               // Bereken de aansluitpunten voor de pijl
               const angle = Math.atan2(node.y - parent.y, node.x - parent.x);
               const nodeRadius = 45;
-
               const startX = parent.x + Math.cos(angle) * nodeRadius;
               const startY = parent.y + Math.sin(angle) * nodeRadius;
               const endX = node.x - Math.cos(angle) * nodeRadius;
@@ -645,7 +488,6 @@ export default function BayesianNetworkDemo() {
               ? "bg-green-100 border-green-500"
               : "bg-red-100 border-red-500";
           }
-
           if (isSelected) {
             nodeColor += " ring-2 ring-primary ring-offset-2";
           }
@@ -662,7 +504,6 @@ export default function BayesianNetworkDemo() {
               onClick={() => setSelectedNode(node.id)}
             >
               <span className="font-medium text-sm">{node.name}</span>
-
               {hasEvidence ? (
                 <Badge
                   variant="outline"
@@ -685,7 +526,6 @@ export default function BayesianNetworkDemo() {
                   {(probability * 100).toFixed(0)}%
                 </div>
               )}
-
               <div className="absolute bottom-0 left-0 right-0 flex justify-center space-x-1 -mb-8">
                 <Button
                   size="sm"
@@ -727,39 +567,6 @@ export default function BayesianNetworkDemo() {
     <div className="bg-card rounded-lg border shadow-sm p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <h2 className="text-2xl font-bold">Bayesiaans Netwerk Demo</h2>
-
-        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-          <Select
-            value={selectedNetworkId as string}
-            onValueChange={(value) => setSelectedNetworkId(value as "LISP")}
-          >
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue placeholder="Selecteer een model" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="weather">Weer Model</SelectItem>
-              <SelectItem value="medical">Medisch Diagnose Model</SelectItem>
-              <SelectItem value="student">Student Prestatie Model</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowExplanationModal(true)}
-            >
-              <Info className="h-4 w-4 mr-2" /> Uitleg
-            </Button>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => setShowAddNodeModal(true)}
-            >
-              <Plus className="h-4 w-4 mr-2" /> Variabele Toevoegen
-            </Button>
-          </div>
-        </div>
       </div>
 
       {/* Netwerk diagram (altijd zichtbaar) */}
@@ -773,85 +580,6 @@ export default function BayesianNetworkDemo() {
           </CardContent>
         </Card>
       )}
-
-      {/* Modal voor het toevoegen van een nieuwe variabele
-      <Dialog open={showAddNodeModal} onOpenChange={setShowAddNodeModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Nieuwe Variabele Toevoegen</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label htmlFor="new-node-name">Naam</Label>
-              <Input
-                id="new-node-name"
-                value={newNodeData.name}
-                onChange={(e) =>
-                  setNewNodeData({ ...newNodeData, name: e.target.value })
-                }
-                placeholder="Naam van nieuwe variabele"
-              />
-            </div>
-
-            {network.nodes.length > 0 && (
-              <div>
-                <Label className="mb-2 block">Selecteer ouders (max 2):</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {network.nodes.map((node) => (
-                    <div key={node.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`parent-${node.id}`}
-                        checked={!!newNodeData.parents[node.id]}
-                        onCheckedChange={(checked) => {
-                          setNewNodeData({
-                            ...newNodeData,
-                            parents: {
-                              ...newNodeData.parents,
-                              [node.id]: checked as boolean,
-                            },
-                          });
-                        }}
-                        disabled={
-                          Object.values(newNodeData.parents).filter(Boolean)
-                            .length >= 2 && !newNodeData.parents[node.id]
-                        }
-                      />
-                      <Label htmlFor={`parent-${node.id}`} className="text-sm">
-                        {node.name}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )} */}
-
-      {/* <div className="flex justify-end space-x-2 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => setShowAddNodeModal(false)}
-              >
-                Annuleren
-              </Button>
-              <Button onClick={handleAddNode}>Toevoegen</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog> */}
-
-      {/* Modal voor uitleg */}
-      <Dialog
-        open={showExplanationModal}
-        onOpenChange={setShowExplanationModal}
-      >
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Bayesiaanse Netwerken Uitleg</DialogTitle>
-          </DialogHeader>
-          <div className="py-2">
-            <ExplanationPanel />
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

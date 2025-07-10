@@ -1,5 +1,6 @@
 import BayesianNetworkDemo from "@/components/bayesiannets/bayesian-network-demo";
 import ExerciseNetworkDemo from "@/components/bayesiannets/demo-exercises";
+import { exerciseNetworks } from "@/components/bayesiannets/exercise-networks";
 
 export default function Home() {
   return (
@@ -13,11 +14,6 @@ export default function Home() {
         bit with it to understand how it works.
       </h1>
       <BayesianNetworkDemo />
-      <h1 className="text-xl mb-6">
-        In the next section, you can find a demo of the exercise about the Fred
-        LISP dilemma.
-      </h1>
-      <ExerciseNetworkDemo />
     </main>
   );
 }
