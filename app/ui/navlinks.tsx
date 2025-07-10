@@ -31,6 +31,7 @@ const links = [
         name: "Negligent driver",
         href: "/mainpage/bayesiannets/negligentdriver",
       },
+      { name: "Hidden Markov Model", href: "/mainpage/bayesiannets/hmm" },
     ],
   },
   { name: "Solvers", href: "/mainpage/solvers" },

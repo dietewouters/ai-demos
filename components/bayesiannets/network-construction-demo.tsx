@@ -252,7 +252,7 @@ export default function NetworkConstructionDemo() {
     <div className="bg-card rounded-lg border shadow-sm p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">
-          Bayesian Network Constructie Demo
+          Bayesian Network Construction Demo
         </h2>
         <Button variant="outline" size="sm" onClick={resetDemo}>
           <RotateCcw className="h-4 w-4 mr-2" />
