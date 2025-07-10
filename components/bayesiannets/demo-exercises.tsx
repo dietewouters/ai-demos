@@ -308,7 +308,7 @@ export default function BayesianNetworkDemo({
       const probs = network.probabilities[nodeId];
       return (
         <div className="space-y-4">
-          <h3 className="text-lg font-medium">Prior Kans voor {node.name}</h3>
+          <h3 className="text-lg font-medium">Prior change of {node.name}</h3>
           <div className="p-4 bg-gray-50 rounded-lg">
             <CustomProbabilitySlider
               value={probs.true * 100}
@@ -350,10 +350,10 @@ export default function BayesianNetworkDemo({
       return (
         <div className="space-y-4">
           <h3 className="text-lg font-medium">
-            Voorwaardelijke Kansen voor {node.name}
+            Conditional probabilities for {node.name}
           </h3>
           <div className="text-sm mb-2">
-            Elke rij toont P({node.name} | ouders)
+            Each row shows P({node.name} | parent)
           </div>
           <div className="overflow-auto max-h-[400px]">
             <Table>
@@ -362,7 +362,9 @@ export default function BayesianNetworkDemo({
                   {parentNames.map((name) => (
                     <TableHead key={name}>{name}</TableHead>
                   ))}
-                  <TableHead className="w-[60%]">Kans op {node.name}</TableHead>
+                  <TableHead className="w-[60%]">
+                    Chance of {node.name}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -377,11 +379,11 @@ export default function BayesianNetworkDemo({
                           <TableCell key={cond} className="whitespace-nowrap">
                             {value === "true" ? (
                               <span className="flex items-center text-green-600">
-                                <Check className="h-4 w-4 mr-1" /> Waar
+                                <Check className="h-4 w-4 mr-1" /> True
                               </span>
                             ) : (
                               <span className="flex items-center text-red-600">
-                                <X className="h-4 w-4 mr-1" /> Onwaar
+                                <X className="h-4 w-4 mr-1" /> False
                               </span>
                             )}
                           </TableCell>
@@ -513,11 +515,11 @@ export default function BayesianNetworkDemo({
                 >
                   {network.evidence[node.id] ? (
                     <span className="flex items-center">
-                      <Check className="h-3 w-3 mr-1" /> Waar
+                      <Check className="h-3 w-3 mr-1" /> True
                     </span>
                   ) : (
                     <span className="flex items-center">
-                      <X className="h-3 w-3 mr-1" /> Onwaar
+                      <X className="h-3 w-3 mr-1" /> False
                     </span>
                   )}
                 </Badge>
@@ -566,7 +568,7 @@ export default function BayesianNetworkDemo({
   return (
     <div className="bg-card rounded-lg border shadow-sm p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-        <h2 className="text-2xl font-bold">Bayesiaans Netwerk Demo</h2>
+        <h2 className="text-2xl font-bold">Bayesian Netwerk Demo</h2>
       </div>
 
       {/* Netwerk diagram (altijd zichtbaar) */}

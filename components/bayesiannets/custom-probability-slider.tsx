@@ -45,8 +45,8 @@ export default function CustomProbabilitySlider({
         />
       </div>
       <div className="flex justify-between text-xs">
-        <div className="text-red-500">Onwaar {(100 - value).toFixed(0)}%</div>
-        <div className="text-green-500">Waar {value.toFixed(0)}%</div>
+        <div className="text-red-500">False {(100 - value).toFixed(0)}%</div>
+        <div className="text-green-500">True {value.toFixed(0)}%</div>
       </div>
     </div>
   );

@@ -54,14 +54,14 @@ export default function ProbabilityTables({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Waarde</TableHead>
-                <TableHead>Kans</TableHead>
-                <TableHead>Aanpassen</TableHead>
+                <TableHead>Value</TableHead>
+                <TableHead>Chance</TableHead>
+                <TableHead>Adapt</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               <TableRow>
-                <TableCell>Waar</TableCell>
+                <TableCell>True</TableCell>
                 <TableCell>{(probs.true * 100).toFixed(1)}%</TableCell>
                 <TableCell className="w-[200px]">
                   <Slider
@@ -76,7 +76,7 @@ export default function ProbabilityTables({
                 </TableCell>
               </TableRow>
               <TableRow>
-                <TableCell>Onwaar</TableCell>
+                <TableCell>False</TableCell>
                 <TableCell>{(probs.false * 100).toFixed(1)}%</TableCell>
                 <TableCell>
                   <Slider
