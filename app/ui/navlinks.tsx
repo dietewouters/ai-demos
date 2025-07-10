@@ -27,6 +27,10 @@ const links = [
     children: [
       { name: "Fred LISP dilemma", href: "/mainpage/bayesiannets/fredlisp" },
       { name: "Nuclear power plant", href: "/mainpage/bayesiannets/nuclear" },
+      {
+        name: "Negligent driver",
+        href: "/mainpage/bayesiannets/negligentdriver",
+      },
     ],
   },
   { name: "Solvers", href: "/mainpage/solvers" },
