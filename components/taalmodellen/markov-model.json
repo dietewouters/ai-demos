@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Exercise1",
+    "displayName": "Exercise 1",
+    "trainingFile": "/data/exercise1.txt"
+  },
+  {
+    "name": "katvandeburen",
+    "displayName": "De hond van de man van de buren...",
+    "trainingText": "De hond van de man van de buren van de kat beet de man van de kat van de buren"
+  },
+  {
+    "name": "bijbel",
+    "displayName": "Bijbel Genesis",
+    "trainingFile": "/data/bijbel.txt"
+  },
+  {
+    "name": "clouseau",
+    "displayName": "Clouseau Lyrics",
+    "trainingFile": "/data/clouseau.txt"
+  },
+  {
+    "name": "torfs",
+    "displayName": "Rik Torfs Tweets",
+    "trainingFile": "/data/torfs-tweets.txt"
+  }
+]

@@ -20,7 +20,11 @@ const links = [
   { name: "Propositional Logic", href: "/mainpage/propositionallogic" },
   { name: "First Order Logic", href: "/mainpage/firstorderlogic" },
   { name: "Probability", href: "/mainpage/probability" },
-  { name: "LLMs", href: "/mainpage/llms" },
+  {
+    name: "LLMs",
+    href: "/mainpage/llms",
+    children: [{ name: "General", href: "/mainpage/llms/general" }],
+  },
   {
     name: "Bayesian Nets",
     href: "/mainpage/bayesiannets",
