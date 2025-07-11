@@ -5,6 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
+import { Info } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import ExplanationPanel from "./explanation-panel";
 
 interface ConstructionStep {
   step: number;
@@ -136,6 +144,7 @@ const constructionSteps: ConstructionStep[] = [
 
 export default function NetworkConstructionDemo() {
   const [currentStep, setCurrentStep] = useState(0);
+  const [showExplanationModal, setShowExplanationModal] = useState(false);
 
   const currentStepData = constructionSteps[currentStep];
 
@@ -158,6 +167,15 @@ export default function NetworkConstructionDemo() {
   const renderNetworkDiagram = () => {
     return (
       <div className="relative border rounded-md h-[500px] bg-gray-50">
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowExplanationModal(true)}
+          >
+            <Info className="h-4 w-4 mr-2" /> Info
+          </Button>
+        </div>
         <svg width="100%" height="100%" className="w-full">
           {/* Render edges */}
           {currentStepData.edges.map((edge, index) => {
@@ -259,10 +277,8 @@ export default function NetworkConstructionDemo() {
           Reset
         </Button>
       </div>
-
       {/* Network diagram */}
       <div className="mb-6">{renderNetworkDiagram()}</div>
-
       {/* Step information */}
       <Card className="mb-6">
         <CardHeader>
@@ -343,7 +359,6 @@ export default function NetworkConstructionDemo() {
           )}
         </CardContent>
       </Card>
-
       {/* Navigation controls */}
       <div className="flex justify-between items-center">
         <Button
@@ -380,7 +395,6 @@ export default function NetworkConstructionDemo() {
           <ChevronRight className="h-4 w-4 ml-2" />
         </Button>
       </div>
-
       {/* Completion message */}
       {currentStep === constructionSteps.length - 1 && (
         <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
@@ -389,6 +403,19 @@ export default function NetworkConstructionDemo() {
           </h3>
         </div>
       )}
+      <Dialog
+        open={showExplanationModal}
+        onOpenChange={setShowExplanationModal}
+      >
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle></DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <ExplanationPanel />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

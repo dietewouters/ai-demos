@@ -1,15 +1,17 @@
-import type { BayesianNetwork, NetworkNode } from "./network-types";
+import type {
+  BayesianNetwork,
+  NetworkNode,
+  NetworkEdge,
+} from "./network-types";
 
 // Helper functie om edges te genereren uit parent-child relaties
-function generateEdges(nodes: any[]): { from: string; to: string }[] {
-  const edges: { from: string; to: string }[] = [];
-
+function generateEdges(nodes: any[]): NetworkEdge[] {
+  const edges: NetworkEdge[] = [];
   nodes.forEach((node) => {
     node.parents.forEach((parent: string) => {
       edges.push({ from: parent, to: node.id });
     });
   });
-
   return edges;
 }
 
@@ -19,7 +21,6 @@ function addChildrenToNodes(nodes: any[]): NetworkNode[] {
     const children = nodes
       .filter((otherNode) => otherNode.parents.includes(node.id))
       .map((child) => child.id);
-
     return {
       ...node,
       children, // Voeg children array toe
@@ -69,25 +70,9 @@ const lispBaseNodes = [
 
 export const lispNetwork: BayesianNetwork = {
   name: "Fred's LISP dilemma",
-  description:
-    "Een netwerk dat factoren modelleert die LISP programmeervaardigheden beïnvloeden",
+  description: "",
   nodes: addChildrenToNodes(lispBaseNodes),
   edges: generateEdges(lispBaseNodes),
-  probabilities: {
-    C: { true: 0.4, false: 0.6 },
-    H: { true: 0.99, false: 0.01 },
-    E: {
-      "H=true": { true: 0.95, false: 0.05 },
-      "H=false": { true: 0.1, false: 0.9 },
-    },
-    I: {
-      "H=true,C=true": { true: 0.6, false: 0.4 },
-      "H=false,C=true": { true: 0.01, false: 0.99 },
-      "H=true,C=false": { true: 0.9, false: 0.1 },
-      "H=false,C=false": { true: 0.05, false: 0.95 },
-    },
-  },
-  evidence: {},
 };
 
 // Nuclear power plant network
@@ -141,30 +126,9 @@ const nuclearBaseNodes = [
 
 export const nuclearNetwork: BayesianNetwork = {
   name: "Nuclear Power Plant",
-  description: "Een netwerk dat de veiligheid van een kerncentrale modelleert",
+  description: "",
   nodes: addChildrenToNodes(nuclearBaseNodes),
   edges: generateEdges(nuclearBaseNodes),
-  probabilities: {
-    T: { true: 0.5, false: 0.5 },
-    FG: {
-      "T=true": { true: 0.1, false: 0.9 },
-      "T=false": { true: 0.05, false: 0.95 },
-    },
-    FA: { true: 0.05, false: 0.95 },
-    G: {
-      "T=true,FG=true": { true: 0.4, false: 0.6 },
-      "T=true,FG=false": { true: 0.9, false: 0.1 },
-      "T=false,FG=true": { true: 0.6, false: 0.4 },
-      "T=false,FG=false": { true: 0.1, false: 0.9 },
-    },
-    A: {
-      "G=true,FA=true": { true: 0.0, false: 1.0 },
-      "G=true,FA=false": { true: 1.0, false: 0.0 },
-      "G=false,FA=true": { true: 0.0, false: 1.0 },
-      "G=false,FA=false": { true: 0.1, false: 0.9 },
-    },
-  },
-  evidence: {},
 };
 
 // Negligent driver network
@@ -245,77 +209,13 @@ const driverBaseNodes = [
 
 export const driverNetwork: BayesianNetwork = {
   name: "Negligent Driver",
-  description:
-    "Een netwerk dat problemen met auto's en nalatige bestuurders modelleert",
+  description: "",
   nodes: addChildrenToNodes(driverBaseNodes),
   edges: generateEdges(driverBaseNodes),
-  probabilities: {
-    NegligentDriver: { true: 0.1, false: 0.9 },
-    Winter: { true: 0.2, false: 0.8 },
-    TankEmpty: {
-      "NegligentDriver=true": { true: 0.1, false: 0.9 },
-      "NegligentDriver=false": { true: 0.01, false: 0.99 },
-    },
-    LightsOnOverNight: {
-      "NegligentDriver=true": { true: 0.3, false: 0.7 },
-      "NegligentDriver=false": { true: 0.02, false: 0.98 },
-    },
-    Cold: {
-      "Winter=true": { true: 0.8, false: 0.2 },
-      "Winter=false": { true: 0.1, false: 0.9 },
-    },
-    BatteryProblem: {
-      "LightsOnOverNight=true,Cold=true": { true: 0.9, false: 0.1 },
-      "LightsOnOverNight=true,Cold=false": { true: 0.8, false: 0.2 },
-      "LightsOnOverNight=false,Cold=true": { true: 0.2, false: 0.8 },
-      "LightsOnOverNight=false,Cold=false": { true: 0.01, false: 0.99 },
-    },
-    EngineNotStarting: {
-      "TankEmpty=true,BatteryProblem=true": { true: 0.9, false: 0.1 },
-      "TankEmpty=true,BatteryProblem=false": { true: 0.8, false: 0.2 },
-      "TankEmpty=false,BatteryProblem=true": { true: 0.7, false: 0.3 },
-      "TankEmpty=false,BatteryProblem=false": { true: 0.05, false: 0.95 },
-    },
-    RadioSilent: {
-      "BatteryProblem=true": { true: 0.95, false: 0.05 },
-      "BatteryProblem=false": { true: 0.1, false: 0.9 },
-    },
-  },
-  evidence: {},
 };
-
-// Registry van alle beschikbare networks
-export const NETWORK_REGISTRY: Record<string, BayesianNetwork> = {
-  LISP: lispNetwork,
-  NUCLEAR: nuclearNetwork,
-  DRIVER: driverNetwork,
-};
-
-// Helper functie om een network op te halen
-export function getNetwork(networkName: string): BayesianNetwork | null {
-  return NETWORK_REGISTRY[networkName.toUpperCase()] || null;
-}
-
-// Helper functie om alle beschikbare network namen op te halen
-export function getAvailableNetworks(): string[] {
-  return Object.keys(NETWORK_REGISTRY);
-}
-
-// Helper functie om network info op te halen
-export function getNetworkInfo(): Array<{
-  name: string;
-  displayName: string;
-  description: string;
-}> {
-  return Object.entries(NETWORK_REGISTRY).map(([key, network]) => ({
-    name: key,
-    displayName: network.name || key,
-    description: network.description || "Geen beschrijving beschikbaar",
-  }));
-}
 
 // D-separate network
-const dSeparatedNodes = [
+const dSeparatedBaseNodes = [
   {
     id: "A",
     name: "A",
@@ -426,57 +326,239 @@ const dSeparatedNodes = [
   },
 ];
 
-export const dsepnetwork: BayesianNetwork = {
-  name: "D-separated Network",
+export const dsepNetwork: BayesianNetwork = {
+  name: "Network exercise 7",
   description: "",
-  nodes: addChildrenToNodes(dSeparatedNodes),
-  edges: generateEdges(dSeparatedNodes),
-  probabilities: {
-    A: { true: 0.1, false: 0.9 },
-    B: { true: 0.2, false: 0.8 },
-    J: { true: 0.3, false: 0.7 },
-    C: {
-      "A=true": { true: 0.1, false: 0.9 },
-      "A=false": { true: 0.01, false: 0.99 },
-    },
-    E: {
-      "B=true": { true: 0.3, false: 0.7 },
-      "B=false": { true: 0.02, false: 0.98 },
-    },
-    F: {
-      "B=true": { true: 0.8, false: 0.2 },
-      "B=false": { true: 0.1, false: 0.9 },
-    },
-    D: {
-      "C=true,E=true": { true: 0.9, false: 0.1 },
-      "C=true,E=false": { true: 0.8, false: 0.2 },
-      "C=false,E=true": { true: 0.2, false: 0.8 },
-      "C=false,E=false": { true: 0.01, false: 0.99 },
-    },
-    H: {
-      "F=true,J=true": { true: 0.9, false: 0.1 },
-      "F=true,J=false": { true: 0.8, false: 0.2 },
-      "F=false,J=true": { true: 0.7, false: 0.3 },
-      "F=false,J=false": { true: 0.05, false: 0.95 },
-    },
-    G: {
-      "D=true": { true: 0.95, false: 0.05 },
-      "D=false": { true: 0.1, false: 0.9 },
-    },
-    I: {
-      "D=true": { true: 0.95, false: 0.05 },
-      "D=false": { true: 0.1, false: 0.9 },
-    },
-    K: {
-      "D=true,H=true": { true: 0.9, false: 0.1 },
-      "D=true,H=false": { true: 0.8, false: 0.2 },
-      "D=false,H=true": { true: 0.2, false: 0.8 },
-      "D=false,H=false": { true: 0.01, false: 0.99 },
-    },
-    L: {
-      "K=true": { true: 0.95, false: 0.05 },
-      "K=false": { true: 0.1, false: 0.9 },
-    },
-  },
-  evidence: {},
+  nodes: addChildrenToNodes(dSeparatedBaseNodes),
+  edges: generateEdges(dSeparatedBaseNodes),
 };
+
+// Weather network
+const weatherNodes = [
+  { id: "regen", name: "Regen", parents: [], x: 300, y: 100, fixed: true },
+  {
+    id: "sprinkler",
+    name: "Sprinkler",
+    parents: ["regen"],
+    x: 150,
+    y: 300,
+    fixed: true,
+  },
+  {
+    id: "grass_wet",
+    name: "Nat Gras",
+    parents: ["regen", "sprinkler"],
+    x: 450,
+    y: 300,
+    fixed: true,
+  },
+];
+
+export const weatherNetwork: BayesianNetwork = {
+  name: "Weather model",
+  description: "",
+  nodes: addChildrenToNodes(weatherNodes),
+  edges: generateEdges(weatherNodes),
+};
+
+// Medical model
+const medicalNodes = [
+  { id: "smoking", name: "Roken", parents: [], x: 150, y: 50, fixed: true },
+  {
+    id: "pollution",
+    name: "Luchtvervuiling",
+    parents: [],
+    x: 450,
+    y: 50,
+    fixed: true,
+  },
+  {
+    id: "cancer",
+    name: "Longkanker",
+    parents: ["smoking", "pollution"],
+    x: 300,
+    y: 200,
+    fixed: true,
+  },
+  {
+    id: "xray",
+    name: "Röntgenfoto",
+    parents: ["cancer"],
+    x: 150,
+    y: 350,
+    fixed: true,
+  },
+  {
+    id: "dyspnea",
+    name: "Kortademigheid",
+    parents: ["cancer"],
+    x: 450,
+    y: 350,
+    fixed: true,
+  },
+];
+
+export const medicalNetwork: BayesianNetwork = {
+  name: "Medical model",
+  description: "",
+  nodes: addChildrenToNodes(medicalNodes),
+  edges: generateEdges(medicalNodes),
+};
+
+// Student network
+const studentNodes = [
+  {
+    id: "difficulty",
+    name: "Moeilijkheid",
+    parents: [],
+    x: 100,
+    y: 200,
+    fixed: true,
+  },
+  {
+    id: "intelligence",
+    name: "Intelligentie",
+    parents: [],
+    x: 500,
+    y: 200,
+    fixed: true,
+  },
+  {
+    id: "study",
+    name: "Studie-uren",
+    parents: ["difficulty", "intelligence"],
+    x: 300,
+    y: 100,
+    fixed: true,
+  },
+  {
+    id: "grade",
+    name: "Cijfer",
+    parents: ["difficulty", "intelligence", "study"],
+    x: 300,
+    y: 300,
+    fixed: true,
+  },
+  {
+    id: "recommendation",
+    name: "Aanbeveling",
+    parents: ["grade"],
+    x: 500,
+    y: 400,
+    fixed: true,
+  },
+];
+
+export const studentNetwork: BayesianNetwork = {
+  name: "Student model",
+  description: "",
+  nodes: addChildrenToNodes(studentNodes),
+  edges: generateEdges(studentNodes),
+};
+
+// HMM
+const markovNodes = [
+  {
+    id: "X0",
+    name: "X0",
+    parents: [],
+    children: ["Y0", "X1"],
+    x: 100,
+    y: 100,
+    fixed: true,
+  },
+  {
+    id: "X1",
+    name: "X1",
+    parents: ["X0"],
+    children: ["Y1", "X2"],
+    x: 250,
+    y: 100,
+    fixed: true,
+  },
+  {
+    id: "X2",
+    name: "X2",
+    parents: ["X1"],
+    children: ["Y2", "X3"],
+    x: 400,
+    y: 100,
+    fixed: true,
+  },
+  {
+    id: "X3",
+    name: "X3",
+    parents: ["X2"],
+    children: ["Y3"],
+    x: 550,
+    y: 100,
+    fixed: true,
+  },
+  {
+    id: "Y0",
+    name: "Y0",
+    parents: ["X0"],
+    children: [],
+    x: 100,
+    y: 300,
+    fixed: true,
+  },
+  {
+    id: "Y1",
+    name: "Y1",
+    parents: ["X1"],
+    children: [],
+    x: 250,
+    y: 300,
+    fixed: true,
+  },
+  {
+    id: "Y2",
+    name: "Y2",
+    parents: ["X2"],
+    children: [],
+    x: 400,
+    y: 300,
+    fixed: true,
+  },
+  {
+    id: "Y3",
+    name: "Y3",
+    parents: ["X3"],
+    children: [],
+    x: 550,
+    y: 300,
+    fixed: true,
+  },
+];
+
+export const markovNetwork: BayesianNetwork = {
+  name: "Hidden Markov Model",
+  description: "",
+  nodes: addChildrenToNodes(markovNodes),
+  edges: generateEdges(markovNodes),
+};
+
+// Registry van alle beschikbare networks
+export const predefinedNetworks: BayesianNetwork[] = [
+  lispNetwork,
+  nuclearNetwork,
+  driverNetwork,
+  markovNetwork,
+  dsepNetwork,
+  weatherNetwork,
+  medicalNetwork,
+  studentNetwork,
+];
+
+// Helper functie om een network op te halen op naam
+export function getNetworkByName(
+  networkName: string
+): BayesianNetwork | undefined {
+  return predefinedNetworks.find((net) => net.name === networkName);
+}
+
+// Helper functie om alle beschikbare network namen op te halen
+export function getAvailableNetworkNames(): (string | undefined)[] {
+  return predefinedNetworks.map((net) => net.name);
+}

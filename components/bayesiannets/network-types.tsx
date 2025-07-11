@@ -1,6 +1,14 @@
+export type StepType =
+  | "select"
+  | "parents"
+  | "children"
+  | "coparents"
+  | "complete";
+
 export interface NetworkNode {
   id: string;
-  name: string;
+  name?: string;
+  label?: string;
   parents: string[];
   children: string[];
   x: number;
@@ -20,6 +28,12 @@ export interface BayesianNetwork {
   description?: string;
   probabilities?: Record<string, any>;
   evidence?: Record<string, any>;
+}
+
+export interface MarkovBlanketStep {
+  type: StepType;
+  nodes: string[];
+  description: string;
 }
 
 export interface NetworkState {
