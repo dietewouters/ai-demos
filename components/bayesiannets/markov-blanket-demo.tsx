@@ -55,24 +55,25 @@ export default function MarkovBlanketDemo({
   width = 500,
   height = 400,
 }: MarkovBlanketDemoProps) {
-  const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null); // AANGEPAST: Nu een enkele node ID of null
   const [currentStep, setCurrentStep] = useState<StepType>("select");
   const [markovBlanket, setMarkovBlanket] = useState<string[]>([]);
   const [steps, setSteps] = useState<MarkovBlanketStep[]>([]);
 
   const calculateMarkovBlanket = useCallback(
-    (nodeIds: string[]) => {
+    (nodeId: string) => {
+      // AANGEPAST: Accepteert nu een enkele node ID
       const blanket = new Set<string>();
       const stepList: MarkovBlanketStep[] = [];
 
+      const targetNode = getNodeById(nodeId);
+      if (!targetNode) return { blanket: [], steps: [] };
+
       // Stap 1: Ouders toevoegen
       const parents = new Set<string>();
-      nodeIds.forEach((nodeId) => {
-        const node = getNodeById(nodeId);
-        if (node && node.parents) {
-          node.parents.forEach((parent) => parents.add(parent));
-        }
-      });
+      if (targetNode.parents) {
+        targetNode.parents.forEach((parent) => parents.add(parent));
+      }
 
       if (parents.size > 0) {
         parents.forEach((parent) => blanket.add(parent));
@@ -80,17 +81,16 @@ export default function MarkovBlanketDemo({
       stepList.push({
         type: "parents",
         nodes: Array.from(parents),
-        description: `Step 1: Add al the parents of ${nodeIds.join(", ")}`,
+        description: `Stap 1: Voeg alle ouders toe van ${getNodeLabel(
+          targetNode
+        )}`, // AANGEPAST
       });
 
       // Stap 2: Kinderen toevoegen
       const children = new Set<string>();
-      nodeIds.forEach((nodeId) => {
-        const node = getNodeById(nodeId);
-        if (node && node.children) {
-          node.children.forEach((child) => children.add(child));
-        }
-      });
+      if (targetNode.children) {
+        targetNode.children.forEach((child) => children.add(child));
+      }
 
       if (children.size > 0) {
         children.forEach((child) => blanket.add(child));
@@ -98,7 +98,9 @@ export default function MarkovBlanketDemo({
       stepList.push({
         type: "children",
         nodes: Array.from(children),
-        description: `Step 2: Add all children of ${nodeIds.join(", ")}`,
+        description: `Stap 2: Voeg alle kinderen toe van ${getNodeLabel(
+          targetNode
+        )}`, // AANGEPAST
       });
 
       // Stap 3: Co-ouders (andere ouders van kinderen) toevoegen
@@ -107,7 +109,8 @@ export default function MarkovBlanketDemo({
         const childNode = getNodeById(childId);
         if (childNode && childNode.parents) {
           childNode.parents.forEach((parent) => {
-            if (!nodeIds.includes(parent)) {
+            if (parent !== nodeId) {
+              // Zorg ervoor dat de target node zelf niet als co-ouder wordt toegevoegd
               coparents.add(parent);
             }
           });
@@ -120,9 +123,9 @@ export default function MarkovBlanketDemo({
       stepList.push({
         type: "coparents",
         nodes: Array.from(coparents),
-        description: `Step 3: Add all the parents of the children of ${nodeIds.join(
-          ", "
-        )} `,
+        description: `Stap 3: Voeg co-ouders toe (andere ouders van kinderen van ${getNodeLabel(
+          targetNode
+        )})`, // AANGEPAST
       });
 
       return { blanket: Array.from(blanket), steps: stepList };
@@ -180,19 +183,13 @@ export default function MarkovBlanketDemo({
   const handleNodeClick = (nodeId: string) => {
     if (currentStep !== "select") return;
 
-    setSelectedNodes((prev) => {
-      if (prev.includes(nodeId)) {
-        return prev.filter((id) => id !== nodeId);
-      } else {
-        return [...prev, nodeId];
-      }
-    });
+    setSelectedNode((prev) => (prev === nodeId ? null : nodeId)); // AANGEPAST: Toggle selectie
   };
 
   const startDemo = () => {
-    if (selectedNodes.length === 0) return;
+    if (!selectedNode) return; // AANGEPAST: Controleer op enkele geselecteerde node
 
-    const result = calculateMarkovBlanket(selectedNodes);
+    const result = calculateMarkovBlanket(selectedNode); // AANGEPAST: Geef enkele node ID door
     setMarkovBlanket(result.blanket);
     setSteps(result.steps);
     setCurrentStep("parents");
@@ -212,14 +209,14 @@ export default function MarkovBlanketDemo({
   };
 
   const reset = () => {
-    setSelectedNodes([]);
+    setSelectedNode(null); // AANGEPAST
     setCurrentStep("select");
     setMarkovBlanket([]);
     setSteps([]);
   };
 
   const getNodeColor = (nodeId: string) => {
-    if (selectedNodes.includes(nodeId)) return "#3b82f6"; // Blauw voor geselecteerde nodes
+    if (selectedNode === nodeId) return "#3b82f6"; // AANGEPAST: Controleer op enkele geselecteerde node
 
     if (currentStep === "select") return "#e5e7eb"; // Grijs voor niet-geselecteerd
 
@@ -238,7 +235,7 @@ export default function MarkovBlanketDemo({
     }
 
     if (currentStep === "complete" && markovBlanket.includes(nodeId)) {
-      return "#ec4899"; // Paars voor complete Markov blanket
+      return "#8b5cf6"; // Paars voor complete Markov blanket
     }
 
     return "#e5e7eb";
@@ -246,7 +243,7 @@ export default function MarkovBlanketDemo({
 
   const getCurrentStepDescription = () => {
     if (currentStep === "select") {
-      return "Select one or more nodes to start the demo.";
+      return "Selecteer één node door erop te klikken"; // AANGEPAST
     }
 
     const stepData = steps.find((step) => step.type === currentStep);
@@ -354,20 +351,17 @@ export default function MarkovBlanketDemo({
                   <CardTitle className="text-lg">Controles</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {selectedNodes.length > 0 && (
+                  {selectedNode && ( // AANGEPAST: Controleer op enkele geselecteerde node
                     <div>
                       <p className="text-sm font-medium mb-2">
-                        Selected nodes:
-                      </p>
+                        Geselecteerde node:
+                      </p>{" "}
+                      {/* AANGEPAST */}
                       <div className="flex flex-wrap gap-1">
-                        {selectedNodes.map((nodeId) => {
-                          const node = getNodeById(nodeId);
-                          return (
-                            <Badge key={nodeId} variant="default">
-                              {nodeId} ({node ? getNodeLabel(node) : nodeId})
-                            </Badge>
-                          );
-                        })}
+                        {/* AANGEPAST: Toon alleen de geselecteerde node */}
+                        <Badge key={selectedNode} variant="default">
+                          {selectedNode} ({getNodeById(selectedNode)?.label})
+                        </Badge>
                       </div>
                     </div>
                   )}
@@ -376,9 +370,11 @@ export default function MarkovBlanketDemo({
                     {currentStep === "select" && (
                       <Button
                         onClick={startDemo}
-                        disabled={selectedNodes.length === 0}
+                        disabled={!selectedNode}
                         className="flex-1"
                       >
+                        {" "}
+                        {/* AANGEPAST */}
                         Start Demo
                       </Button>
                     )}
@@ -414,23 +410,23 @@ export default function MarkovBlanketDemo({
                       <div className="space-y-1 text-xs">
                         <div className="flex items-center gap-2">
                           <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-                          <span>Selected node(s)</span>
+                          <span>Geselecteerde node</span> {/* AANGEPAST */}
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-4 h-4 rounded-full bg-red-500"></div>
-                          <span>Parents</span>
+                          <span>Ouders</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-4 h-4 rounded-full bg-green-500"></div>
-                          <span>Children</span>
+                          <span>Kinderen</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-4 h-4 rounded-full bg-amber-500"></div>
-                          <span>Co-parents</span>
+                          <span>Co-ouders</span>
                         </div>
                         {currentStep === "complete" && (
                           <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded-full bg-pink-500"></div>
+                            <div className="w-4 h-4 rounded-full bg-purple-500"></div>
                             <span>Complete Markov Blanket</span>
                           </div>
                         )}
