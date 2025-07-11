@@ -32,6 +32,7 @@ const links = [
         href: "/mainpage/bayesiannets/negligentdriver",
       },
       { name: "Hidden Markov Model", href: "/mainpage/bayesiannets/hmm" },
+      { name: "Exercise 7", href: "/mainpage/bayesiannets/dsep" },
     ],
   },
   { name: "Solvers", href: "/mainpage/solvers" },

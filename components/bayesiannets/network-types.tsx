@@ -21,3 +21,9 @@ export interface BayesianNetwork {
   probabilities?: Record<string, any>;
   evidence?: Record<string, any>;
 }
+
+export interface NetworkState {
+  evidenceNodes: Set<string>;
+  targetNode: string | null;
+  dSeparatedNodes: Set<string>;
+}

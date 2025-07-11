@@ -3,6 +3,7 @@ import ExerciseNetworkDemo from "@/components/bayesiannets/demo-exercises";
 import MarkovBlanketDemo from "@/components/bayesiannets/markov-blanket-demo";
 import { exerciseNetworks } from "@/components/bayesiannets/exercise-networks";
 import { driverNetwork } from "@/components/bayesiannets/network-registry";
+import DSeparationDemo from "@/components/bayesiannets/d-separatio-demo";
 
 export default function Home() {
   return (
@@ -18,6 +19,14 @@ export default function Home() {
       </p>
 
       <MarkovBlanketDemo network={driverNetwork} />
+
+      <div className="mt-8"></div>
+      <p className="text-gray-700">
+        Below you can find a demo showing how to decide which nodes are
+        d-separated given some evidence.
+      </p>
+
+      <DSeparationDemo network={driverNetwork} />
     </main>
   );
 }

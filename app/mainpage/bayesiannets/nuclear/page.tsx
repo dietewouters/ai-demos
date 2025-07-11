@@ -4,6 +4,7 @@ import MarkovBlanketDemo from "@/components/bayesiannets/markov-blanket-demo";
 import { exerciseNetworks } from "@/components/bayesiannets/exercise-networks";
 import NetworkConstructionDemo from "@/components/bayesiannets/network-construction-demo";
 import { nuclearNetwork } from "@/components/bayesiannets/network-registry";
+import DSeparationDemo from "@/components/bayesiannets/d-separatio-demo";
 
 export default function Home() {
   return (
@@ -48,7 +49,6 @@ export default function Home() {
       </div>
 
       <div className="mt-8">
-        <div className="text-xl font-semibold">Set up the network</div>
         <p className="text-gray-700">
           First we will learn how to set up a Bayesian network. You can use the
           demo below to build it step by step.
@@ -64,6 +64,7 @@ export default function Home() {
         </p>
 
         <ExerciseNetworkDemo networkName="NUCLEAR" />
+        <div />
         <div className="mt-8"></div>
         <p className="text-gray-700">
           Below you can find a demo showing how the Markov blanket of different
@@ -72,6 +73,13 @@ export default function Home() {
 
         <MarkovBlanketDemo network={nuclearNetwork} />
       </div>
+      <div className="mt-8"></div>
+      <p className="text-gray-700">
+        Below you can find a demo showing how to decide which nodes are
+        d-separated given some evidence.
+      </p>
+
+      <DSeparationDemo network={nuclearNetwork} />
     </div>
   );
 }
