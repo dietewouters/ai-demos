@@ -110,9 +110,7 @@ export default function MarkovBlanketDemo({
       stepList.push({
         type: "parents",
         nodes: Array.from(parents),
-        description: `Stap 1: Voeg alle ouders toe van ${getNodeLabel(
-          targetNode
-        )}`,
+        description: `Step 1: add all the parents of ${targetNode.name}`,
       });
 
       // Stap 2: Kinderen toevoegen
@@ -126,9 +124,7 @@ export default function MarkovBlanketDemo({
       stepList.push({
         type: "children",
         nodes: Array.from(children),
-        description: `Stap 2: Voeg alle kinderen toe van ${getNodeLabel(
-          targetNode
-        )}`,
+        description: `Step 2: add all the children of ${targetNode.name}`,
       });
 
       // Stap 3: Co-ouders (andere ouders van kinderen) toevoegen
@@ -150,9 +146,7 @@ export default function MarkovBlanketDemo({
       stepList.push({
         type: "coparents",
         nodes: Array.from(coparents),
-        description: `Stap 3: Voeg co-ouders toe (andere ouders van kinderen van ${getNodeLabel(
-          targetNode
-        )})`,
+        description: `Step 3: add all the co-parents (parents from the children of ${targetNode.name})`,
       });
 
       return { blanket: Array.from(blanket), steps: stepList };
@@ -421,12 +415,10 @@ export default function MarkovBlanketDemo({
                 <CardContent className="space-y-4">
                   {selectedNode && (
                     <div>
-                      <p className="text-sm font-medium mb-2">
-                        Geselecteerde node:
-                      </p>
+                      <p className="text-sm font-medium mb-2">Selected node:</p>
                       <div className="flex flex-wrap gap-1">
                         <Badge key={selectedNode} variant="default">
-                          {selectedNode} ({getNodeById(selectedNode)?.label})
+                          {selectedNode}
                         </Badge>
                       </div>
                     </div>
@@ -468,19 +460,19 @@ export default function MarkovBlanketDemo({
                       <div className="space-y-1 text-xs">
                         <div className="flex items-center gap-2">
                           <div className="w-4 h-4 rounded-full bg-blue-500 border border-blue-700"></div>
-                          <span>Geselecteerde node</span>
+                          <span>Selected node</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-4 h-4 rounded-full bg-red-500 border border-red-700"></div>
-                          <span>Ouders</span>
+                          <span>Parents</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-4 h-4 rounded-full bg-green-500 border border-green-700"></div>
-                          <span>Kinderen</span>
+                          <span>Children</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-4 h-4 rounded-full bg-amber-500 border border-amber-700"></div>
-                          <span>Co-ouders</span>
+                          <span>Co-parents</span>
                         </div>
                         {currentStep === "complete" && (
                           <div className="flex items-center gap-2">
@@ -502,8 +494,7 @@ export default function MarkovBlanketDemo({
                               const node = getNodeById(nodeId);
                               return (
                                 <Badge key={nodeId} variant="secondary">
-                                  {nodeId} ({node ? getNodeLabel(node) : nodeId}
-                                  )
+                                  {nodeId}
                                 </Badge>
                               );
                             })}
