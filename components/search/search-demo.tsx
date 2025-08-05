@@ -1,0 +1,638 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { RotateCcw, Settings, ChevronRight } from "lucide-react";
+import { algorithms, getAlgorithmById, type SearchStep } from "./algorithms";
+
+// Graph data structures
+const graphs = {
+  tree: {
+    name: "Problem 1: Breadth-First?",
+    nodes: [
+      { id: "G", x: 350, y: 150 },
+      { id: "A", x: 50, y: 50 },
+      { id: "B", x: 100, y: 50 },
+      { id: "C", x: 150, y: 50 },
+      { id: "D", x: 200, y: 50 },
+      { id: "E", x: 125, y: 150 },
+      { id: "F", x: 200, y: 150 },
+      { id: "H", x: 200, y: 250 },
+      { id: "I", x: 250, y: 250 },
+      { id: "J", x: 300, y: 250 },
+      { id: "K", x: 350, y: 250 },
+      { id: "L", x: 275, y: 150 },
+      { id: "S", x: 50, y: 150 },
+    ],
+    edges: [
+      { from: "S", to: "A" },
+      { from: "A", to: "B" },
+      { from: "B", to: "C" },
+      { from: "C", to: "D" },
+      { from: "S", to: "E" },
+      { from: "E", to: "F" },
+      { from: "D", to: "F" },
+      { from: "F", to: "H" },
+      { from: "H", to: "I" },
+      { from: "I", to: "J" },
+      { from: "J", to: "K" },
+      { from: "K", to: "G" },
+      { from: "F", to: "L" },
+      { from: "L", to: "G" },
+    ],
+  },
+  network: {
+    name: "Session 2: ex. 1.1",
+    nodes: [
+      { id: "S", x: 25, y: 150 },
+      { id: "A", x: 150, y: 50 },
+      { id: "B", x: 150, y: 150 },
+      { id: "C", x: 150, y: 250 },
+      { id: "E", x: 250, y: 100 },
+      { id: "D", x: 250, y: 200 },
+      { id: "F", x: 350, y: 150 },
+      { id: "G", x: 450, y: 150 },
+    ],
+    edges: [
+      { from: "S", to: "A" },
+      { from: "S", to: "B" },
+      { from: "S", to: "C" },
+      { from: "A", to: "E" },
+      { from: "B", to: "E" },
+      { from: "B", to: "D" },
+      { from: "C", to: "D" },
+      { from: "E", to: "F" },
+      { from: "D", to: "F" },
+      { from: "F", to: "G" },
+    ],
+  },
+  ex2: {
+    name: "Session 2: ex. 1.2",
+    nodes: [
+      { id: "S", x: 200, y: 50 },
+      { id: "C", x: 50, y: 50 },
+      { id: "A", x: 350, y: 50 },
+      { id: "D", x: 350, y: 200 },
+      { id: "B", x: 200, y: 200 },
+      { id: "G", x: 50, y: 200 },
+    ],
+    edges: [
+      { from: "S", to: "A" },
+      { from: "S", to: "B" },
+      { from: "S", to: "C" },
+      { from: "A", to: "D" },
+      { from: "D", to: "B" },
+      { from: "B", to: "G" },
+      { from: "C", to: "G" },
+    ],
+  },
+};
+
+type NodeState =
+  | "unvisited"
+  | "visited"
+  | "current"
+  | "start"
+  | "goal"
+  | "frontier"
+  | "path";
+
+interface SearchState {
+  steps: SearchStep[];
+  currentStepIndex: number;
+  isComplete: boolean;
+}
+
+// Stopping criteria options
+const stoppingOptions = [
+  {
+    value: "late",
+    label: "Late Stopping",
+    description: "Stops when goal is processed from frontier",
+  },
+  {
+    value: "early",
+    label: "Early Stopping",
+    description: "Stops when goal is added to frontier",
+  },
+];
+// Loop breaking options
+const loopBreakingOptions = [
+  {
+    value: "on",
+    label: "On",
+    description: "Prevents revisiting nodes (efficient)",
+  },
+  {
+    value: "off",
+    label: "Off",
+    description: "Allows revisiting nodes (can cause loops)",
+  },
+];
+export default function SearchDemo() {
+  const [selectedGraph, setSelectedGraph] =
+    useState<keyof typeof graphs>("tree");
+  const [algorithmId, setAlgorithmId] = useState<string>("bfs");
+  const [stoppingCriterion, setStoppingCriterion] = useState<string>("late");
+  const [loopBreaking, setLoopBreaking] = useState<string>("on");
+  const [startNode, setStartNode] = useState<string>("A");
+  const [goalNode, setGoalNode] = useState<string>("I");
+  const [searchState, setSearchState] = useState<SearchState>({
+    steps: [],
+    currentStepIndex: -1,
+    isComplete: false,
+  });
+
+  const currentGraph = graphs[selectedGraph];
+  const currentAlgorithm = getAlgorithmById(algorithmId);
+
+  // Build adjacency list
+  const buildAdjacencyList = useCallback(() => {
+    const adjList: { [key: string]: string[] } = {};
+    currentGraph.nodes.forEach((node) => {
+      adjList[node.id] = [];
+    });
+    currentGraph.edges.forEach((edge) => {
+      adjList[edge.from].push(edge.to);
+      adjList[edge.to].push(edge.from); // Undirected graph
+    });
+    return adjList;
+  }, [currentGraph]);
+
+  // Generate all search steps using the selected algorithm
+  const generateSearchSteps = useCallback(() => {
+    if (!currentAlgorithm) return [];
+
+    const adjList = buildAdjacencyList();
+    const earlyStop = stoppingCriterion === "early";
+    const useLoopBreaking = loopBreaking === "on";
+    return currentAlgorithm.execute(
+      adjList,
+      startNode,
+      goalNode,
+      earlyStop,
+      useLoopBreaking
+    );
+  }, [
+    currentAlgorithm,
+    startNode,
+    goalNode,
+    buildAdjacencyList,
+    stoppingCriterion,
+    loopBreaking,
+  ]);
+
+  // Reset search state
+  const resetSearch = useCallback(() => {
+    const steps = generateSearchSteps();
+    setSearchState({
+      steps,
+      currentStepIndex: -1,
+      isComplete: false,
+    });
+  }, [generateSearchSteps]);
+
+  // Next step
+  const nextStep = useCallback(() => {
+    setSearchState((prev) => {
+      const nextIndex = prev.currentStepIndex + 1;
+
+      if (nextIndex >= prev.steps.length) {
+        return prev;
+      }
+
+      const nextStep = prev.steps[nextIndex];
+      const isComplete =
+        nextStep &&
+        (nextStep.finalPath !== undefined || nextStep.currentNode === goalNode);
+
+      return {
+        ...prev,
+        currentStepIndex: nextIndex,
+        isComplete,
+      };
+    });
+  }, [goalNode]);
+
+  // Reset when parameters change
+  useEffect(() => {
+    resetSearch();
+  }, [
+    resetSearch,
+    selectedGraph,
+    algorithmId,
+    startNode,
+    goalNode,
+    stoppingCriterion,
+    loopBreaking,
+  ]);
+
+  // Get current step data
+  const getCurrentStep = (): SearchStep | null => {
+    if (
+      searchState.currentStepIndex < 0 ||
+      searchState.currentStepIndex >= searchState.steps.length
+    ) {
+      return null;
+    }
+    return searchState.steps[searchState.currentStepIndex];
+  };
+
+  // Get node state for styling
+  const getNodeState = (nodeId: string): NodeState => {
+    const currentStep = getCurrentStep();
+    if (!currentStep) {
+      if (nodeId === startNode) return "start";
+      if (nodeId === goalNode) return "goal";
+      return "unvisited";
+    }
+
+    if (nodeId === startNode) return "start";
+    if (nodeId === goalNode) return "goal";
+    if (currentStep.finalPath && currentStep.finalPath.includes(nodeId))
+      return "path";
+    if (currentStep.currentNode === nodeId) return "current";
+    if (currentStep.visited.has(nodeId)) return "visited";
+    if (currentStep.frontier.includes(nodeId)) return "frontier";
+    return "unvisited";
+  };
+
+  // Node styling
+  const getNodeStyle = (state: NodeState) => {
+    const baseStyle = "transition-all duration-500 ease-in-out";
+    switch (state) {
+      case "start":
+        return `${baseStyle} fill-red-500 stroke-red-700 stroke-3`;
+      case "goal":
+        return `${baseStyle} fill-green-500 stroke-green-700 stroke-3`;
+      case "current":
+        return `${baseStyle} fill-orange-400 stroke-orange-600 stroke-3 animate-pulse`;
+      case "frontier":
+        return `${baseStyle} fill-yellow-300 stroke-yellow-500 stroke-2`;
+      case "visited":
+        return `${baseStyle} fill-blue-400 stroke-blue-600 stroke-2`;
+      case "path":
+        return `${baseStyle} fill-purple-500 stroke-purple-700 stroke-3`;
+      case "unvisited":
+        return `${baseStyle} fill-gray-200 stroke-gray-400 stroke-1`;
+    }
+  };
+
+  // Check if edge should show arrow
+  const shouldShowArrow = (from: string, to: string): boolean => {
+    const currentStep = getCurrentStep();
+    if (!currentStep || !currentStep.exploredEdge) return false;
+
+    // Don't show orange arrow if this edge is part of the final path
+    if (currentStep.finalPath && shouldShowPathEdge(from, to)) return false;
+
+    // Only show arrow in the correct direction: from parent to child
+    return (
+      currentStep.exploredEdge.from === from &&
+      currentStep.exploredEdge.to === to
+    );
+  };
+
+  const shouldShowPathEdge = (from: string, to: string): boolean => {
+    const currentStep = getCurrentStep();
+    if (!currentStep || !currentStep.finalPath) return false;
+
+    const path = currentStep.finalPath;
+    for (let i = 0; i < path.length - 1; i++) {
+      if (
+        (path[i] === from && path[i + 1] === to) ||
+        (path[i] === to && path[i + 1] === from)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Get edge style
+  const getEdgeStyle = (from: string, to: string) => {
+    // Path edges take priority over exploration arrows
+    if (shouldShowPathEdge(from, to)) {
+      return "stroke-purple-500 stroke-4";
+    }
+    if (shouldShowArrow(from, to)) {
+      return "stroke-orange-500 stroke-4 animate-pulse";
+    }
+    return "stroke-gray-400 stroke-2";
+  };
+
+  const canTakeNextStep =
+    searchState.currentStepIndex < searchState.steps.length - 1;
+  const selectedStoppingOption = stoppingOptions.find(
+    (option) => option.value === stoppingCriterion
+  );
+  const selectedLoopBreakingOption = loopBreakingOptions.find(
+    (option) => option.value === loopBreaking
+  );
+
+  return (
+    <div className="w-full max-w-6xl mx-auto p-6 space-y-6">
+      <div className="text-center space-y-2">
+        <h1 className="text-3xl font-bold">Search Algorithms Step-by-Step</h1>
+        <p className="text-muted-foreground">
+          See how different algorithms explore graphs
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Controls */}
+        <Card className="lg:col-span-1">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              Controls
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Graph Type</label>
+              <Select
+                value={selectedGraph}
+                onValueChange={(value: keyof typeof graphs) =>
+                  setSelectedGraph(value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(graphs).map(([key, graph]) => (
+                    <SelectItem key={key} value={key}>
+                      {graph.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-1">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Algorithm</label>
+                <Select value={algorithmId} onValueChange={setAlgorithmId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {algorithms.map((algorithm) => (
+                      <SelectItem key={algorithm.id} value={algorithm.id}>
+                        {algorithm.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Stopping</label>
+                <Select
+                  value={stoppingCriterion}
+                  onValueChange={setStoppingCriterion}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stoppingOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Loop Breaking</label>
+              <Select value={loopBreaking} onValueChange={setLoopBreaking}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {loopBreakingOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedLoopBreakingOption && (
+                <p className="text-xs text-muted-foreground">
+                  {selectedLoopBreakingOption.description}
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Start</label>
+                <Select value={startNode} onValueChange={setStartNode}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currentGraph.nodes.map((node) => (
+                      <SelectItem key={node.id} value={node.id}>
+                        {node.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Goal</label>
+                <Select value={goalNode} onValueChange={setGoalNode}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currentGraph.nodes.map((node) => (
+                      <SelectItem key={node.id} value={node.id}>
+                        {node.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={nextStep}
+                disabled={!canTakeNextStep}
+                className="flex-1"
+              >
+                <ChevronRight className="w-4 h-4 mr-1" />
+                Next Step
+              </Button>
+              <Button onClick={resetSearch} variant="outline">
+                <RotateCcw className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {searchState.isComplete && (
+              <div className="text-green-600 font-medium text-center">
+                Goal Found!
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Visualization */}
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Graph Exploration</CardTitle>
+            <CardDescription>
+              {searchState.isComplete
+                ? `${currentAlgorithm?.name} (${
+                    selectedStoppingOption?.label
+                  }, Loop Breaking ${
+                    selectedLoopBreakingOption?.label
+                  }) found the goal in ${
+                    searchState.currentStepIndex + 1
+                  } steps!`
+                : canTakeNextStep
+                ? `${currentAlgorithm?.name} (${selectedStoppingOption?.label}, Loop Breaking ${selectedLoopBreakingOption?.label}) is exploring... Click 'Next Step' to continue`
+                : searchState.steps.length > 0
+                ? "Ready to start - Click 'Next Step' to begin"
+                : "Exploration complete"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="w-full h-96 border rounded-lg bg-gray-50 relative overflow-hidden">
+              <svg width="100%" height="100%" viewBox="0 0 500 320">
+                {/* Edges */}
+                {currentGraph.edges.map((edge, index) => {
+                  const fromNode = currentGraph.nodes.find(
+                    (n) => n.id === edge.from
+                  )!;
+                  const toNode = currentGraph.nodes.find(
+                    (n) => n.id === edge.to
+                  )!;
+                  const showArrow = shouldShowArrow(edge.from, edge.to);
+
+                  return (
+                    <g key={index}>
+                      <line
+                        x1={fromNode.x}
+                        y1={fromNode.y}
+                        x2={toNode.x}
+                        y2={toNode.y}
+                        className={getEdgeStyle(edge.from, edge.to)}
+                      />
+                      {showArrow && (
+                        <g>
+                          <defs>
+                            <marker
+                              id={`arrow-${index}`}
+                              viewBox="0 0 10 10"
+                              refX="9"
+                              refY="3"
+                              markerWidth="6"
+                              markerHeight="6"
+                              orient="auto"
+                            >
+                              <path d="M0,0 L0,6 L9,3 z" fill="#f97316" />
+                            </marker>
+                          </defs>
+                          <line
+                            x1={fromNode.x}
+                            y1={fromNode.y}
+                            x2={toNode.x}
+                            y2={toNode.y}
+                            className="stroke-orange-500 stroke-4"
+                            markerEnd={`url(#arrow-${index})`}
+                          />
+                        </g>
+                      )}
+                    </g>
+                  );
+                })}
+
+                {/* Nodes */}
+                {currentGraph.nodes.map((node) => {
+                  const state = getNodeState(node.id);
+                  return (
+                    <g key={node.id}>
+                      <circle
+                        cx={node.x}
+                        cy={node.y}
+                        r="20"
+                        className={getNodeStyle(state)}
+                      />
+                      <text
+                        x={node.x}
+                        y={node.y}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        className="text-sm font-bold fill-white pointer-events-none"
+                      >
+                        {node.id}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+
+            {/* Legend */}
+            <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-red-500 rounded-full"></div>
+                  <span>Start Node</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-green-500 rounded-full"></div>
+                  <span>Goal Node</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-orange-400 rounded-full"></div>
+                  <span>Currently Processing</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-yellow-300 rounded-full"></div>
+                  <span>In Frontier (Waiting)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-blue-400 rounded-full"></div>
+                  <span>Already Visited</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-orange-500 rounded-sm"></div>
+                  <span>Current Exploration Path</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-purple-500 rounded-full"></div>
+                  <span>Solution Path</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

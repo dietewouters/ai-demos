@@ -11,6 +11,7 @@ const links = [
   {
     name: "Search",
     href: "/mainpage/search",
+    children: [{ name: "General", href: "/mainpage/search/general" }],
   },
   {
     name: "Advanced Search and Games",
