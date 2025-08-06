@@ -1,24 +1,4 @@
-export interface SearchStep {
-  currentNode: string;
-  visited: Set<string>;
-  frontier: string[];
-  parent: { [key: string]: string };
-  exploredEdge?: { from: string; to: string };
-  finalPath?: string[];
-}
-
-export interface Algorithm {
-  id: string;
-  name: string;
-  description: string;
-  execute: (
-    adjList: { [key: string]: string[] },
-    startNode: string,
-    goalNode: string,
-    earlyStop?: boolean,
-    loopBreaking?: boolean
-  ) => SearchStep[];
-}
+import type { SearchStep, Algorithm } from "../app/search";
 
 function executeBFS(
   adjList: { [key: string]: string[] },
@@ -31,90 +11,153 @@ function executeBFS(
   const visited = new Set<string>();
   const frontier = [startNode];
   const parent: { [key: string]: string } = {};
+  const paths: { [key: string]: string[] } = { [startNode]: [startNode] };
+
+  // Build initial path queue
+  const getPathQueue = () => frontier.map((node) => paths[node] || [node]);
+
+  // Initial step
+  steps.push({
+    stepType: "start",
+    currentNode: startNode,
+    visited: new Set(),
+    frontier: [startNode],
+    parent: {},
+    pathQueue: [[startNode]],
+    description: ``,
+  });
 
   while (frontier.length > 0) {
     const currentNode = frontier.shift()!; // Queue (FIFO)
 
-    // Loop breaking: skip if already visited
+    // Skip if already visited (prevents infinite loops) - only when loop breaking is on
     if (loopBreaking && visited.has(currentNode)) continue;
 
+    // Step: Take node from frontier
     visited.add(currentNode);
-
-    // Add step showing current node being processed
     steps.push({
+      stepType: "take_from_frontier",
       currentNode,
       visited: new Set(visited),
       frontier: [...frontier],
       parent: { ...parent },
+      pathQueue: getPathQueue(),
+      takenNode: currentNode,
       exploredEdge: parent[currentNode]
         ? { from: parent[currentNode], to: currentNode }
         : undefined,
+      description: `Taking path from frontier: ${paths[currentNode].join(
+        " → "
+      )}`,
     });
 
     // Check if goal is reached (late stopping)
     if (currentNode === goalNode) {
-      // Reconstruct path from goal to start
-      const path: string[] = [];
-      let current = currentNode;
-      while (current) {
-        path.unshift(current);
-        current = parent[current];
-      }
-
-      // Add final step with the complete path
       steps.push({
+        stepType: "goal_found",
         currentNode,
         visited: new Set(visited),
         frontier: [...frontier],
         parent: { ...parent },
-        exploredEdge: parent[currentNode]
-          ? { from: parent[currentNode], to: currentNode }
-          : undefined,
-        finalPath: path,
+        pathQueue: getPathQueue(),
+        finalPath: paths[currentNode],
+        description: `Goal ${goalNode} found! Final path: ${paths[
+          currentNode
+        ].join(" → ")}`,
       });
       break;
     }
 
-    // Add neighbors to frontier in alphabetical order (for BFS)
+    // Step: Highlight all edges from current node
     const neighbors = (adjList[currentNode] || []).sort();
-    for (const neighbor of neighbors) {
-      // With loop breaking: only add if not visited and not already in frontier
-      // Without loop breaking: always add (can lead to duplicates in frontier)
-      const shouldAdd = loopBreaking
-        ? !visited.has(neighbor) && !frontier.includes(neighbor)
-        : !visited.has(neighbor);
+    const highlightedEdges = neighbors.map((neighbor) => ({
+      from: currentNode,
+      to: neighbor,
+    }));
 
-      if (shouldAdd) {
+    steps.push({
+      stepType: "highlight_edges",
+      currentNode,
+      visited: new Set(visited),
+      frontier: [...frontier],
+      parent: { ...parent },
+      pathQueue: getPathQueue(),
+      highlightedEdges,
+      description: `Exploring neighbors of ${currentNode}: ${neighbors.join(
+        ", "
+      )}`,
+    });
+
+    // Step: Add valid neighbors to frontier
+    const validNeighbors = loopBreaking
+      ? neighbors.filter(
+          (neighbor) => !visited.has(neighbor) && !frontier.includes(neighbor)
+        )
+      : neighbors; // voeg alles toe als loopBreaking uit staat
+
+    if (validNeighbors.length > 0) {
+      for (const neighbor of validNeighbors) {
         frontier.push(neighbor);
-        // Only set parent if it hasn't been set before (first time we discover this node)
-        if (!parent[neighbor]) {
+        // altijd parent en path bijwerken als loopBreaking uit staat
+        if (!loopBreaking || !parent[neighbor]) {
           parent[neighbor] = currentNode;
+          paths[neighbor] = [...paths[currentNode], neighbor];
         }
 
         // Early stopping: check if we just added the goal to frontier
         if (earlyStop && neighbor === goalNode) {
-          // Reconstruct path from goal to start
-          const path: string[] = [];
-          let current = neighbor;
-          while (current) {
-            path.unshift(current);
-            current = parent[current];
-          }
-
-          // Add final step with the complete path
           steps.push({
+            stepType: "add_to_frontier",
             currentNode,
             visited: new Set(visited),
             frontier: [...frontier],
             parent: { ...parent },
-            exploredEdge: parent[currentNode]
-              ? { from: parent[currentNode], to: currentNode }
-              : undefined,
-            finalPath: path,
+            pathQueue: getPathQueue(),
+            addedNodes: validNeighbors,
+            description: `Adding to frontier: ${paths[neighbor].join(" → ")}`,
+          });
+
+          steps.push({
+            stepType: "goal_found",
+            currentNode: neighbor,
+            visited: new Set(visited),
+            frontier: [...frontier],
+            parent: { ...parent },
+            pathQueue: getPathQueue(),
+            finalPath: paths[neighbor],
+            description: `Goal ${goalNode} found in frontier! Path: ${paths[
+              neighbor
+            ].join(" → ")}`,
           });
           return steps;
         }
       }
+
+      steps.push({
+        stepType: "add_to_frontier",
+        currentNode,
+        visited: new Set(visited),
+        frontier: [...frontier],
+        parent: { ...parent },
+        pathQueue: getPathQueue(),
+        addedNodes: validNeighbors,
+        description: `Adding to frontier:\n${validNeighbors
+          .map((n) => paths[n].join(" → "))
+          .join(", \n")}`,
+      });
+    } else {
+      steps.push({
+        stepType: "add_to_frontier",
+        currentNode,
+        visited: new Set(visited),
+        frontier: [...frontier],
+        parent: { ...parent },
+        pathQueue: getPathQueue(),
+        addedNodes: [],
+        description: `No new nodes to add to frontier (all neighbors already ${
+          loopBreaking ? "visited or in frontier" : "visited"
+        })`,
+      });
     }
   }
 

@@ -17,90 +17,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RotateCcw, Settings, ChevronRight } from "lucide-react";
-import { algorithms, getAlgorithmById, type SearchStep } from "./algorithms";
-
-// Graph data structures
-const graphs = {
-  tree: {
-    name: "Problem 1: Breadth-First?",
-    nodes: [
-      { id: "G", x: 350, y: 150 },
-      { id: "A", x: 50, y: 50 },
-      { id: "B", x: 100, y: 50 },
-      { id: "C", x: 150, y: 50 },
-      { id: "D", x: 200, y: 50 },
-      { id: "E", x: 125, y: 150 },
-      { id: "F", x: 200, y: 150 },
-      { id: "H", x: 200, y: 250 },
-      { id: "I", x: 250, y: 250 },
-      { id: "J", x: 300, y: 250 },
-      { id: "K", x: 350, y: 250 },
-      { id: "L", x: 275, y: 150 },
-      { id: "S", x: 50, y: 150 },
-    ],
-    edges: [
-      { from: "S", to: "A" },
-      { from: "A", to: "B" },
-      { from: "B", to: "C" },
-      { from: "C", to: "D" },
-      { from: "S", to: "E" },
-      { from: "E", to: "F" },
-      { from: "D", to: "F" },
-      { from: "F", to: "H" },
-      { from: "H", to: "I" },
-      { from: "I", to: "J" },
-      { from: "J", to: "K" },
-      { from: "K", to: "G" },
-      { from: "F", to: "L" },
-      { from: "L", to: "G" },
-    ],
-  },
-  network: {
-    name: "Session 2: ex. 1.1",
-    nodes: [
-      { id: "S", x: 25, y: 150 },
-      { id: "A", x: 150, y: 50 },
-      { id: "B", x: 150, y: 150 },
-      { id: "C", x: 150, y: 250 },
-      { id: "E", x: 250, y: 100 },
-      { id: "D", x: 250, y: 200 },
-      { id: "F", x: 350, y: 150 },
-      { id: "G", x: 450, y: 150 },
-    ],
-    edges: [
-      { from: "S", to: "A" },
-      { from: "S", to: "B" },
-      { from: "S", to: "C" },
-      { from: "A", to: "E" },
-      { from: "B", to: "E" },
-      { from: "B", to: "D" },
-      { from: "C", to: "D" },
-      { from: "E", to: "F" },
-      { from: "D", to: "F" },
-      { from: "F", to: "G" },
-    ],
-  },
-  ex2: {
-    name: "Session 2: ex. 1.2",
-    nodes: [
-      { id: "S", x: 200, y: 50 },
-      { id: "C", x: 50, y: 50 },
-      { id: "A", x: 350, y: 50 },
-      { id: "D", x: 350, y: 200 },
-      { id: "B", x: 200, y: 200 },
-      { id: "G", x: 50, y: 200 },
-    ],
-    edges: [
-      { from: "S", to: "A" },
-      { from: "S", to: "B" },
-      { from: "S", to: "C" },
-      { from: "A", to: "D" },
-      { from: "D", to: "B" },
-      { from: "B", to: "G" },
-      { from: "C", to: "G" },
-    ],
-  },
-};
+import { algorithms, getAlgorithmById } from "./algorithms";
+import { graphs, defaultNodes } from "./app/graphs";
+import type { SearchStep } from "./app/search";
 
 type NodeState =
   | "unvisited"
@@ -130,6 +49,7 @@ const stoppingOptions = [
     description: "Stops when goal is added to frontier",
   },
 ];
+
 // Loop breaking options
 const loopBreakingOptions = [
   {
@@ -143,14 +63,14 @@ const loopBreakingOptions = [
     description: "Allows revisiting nodes (can cause loops)",
   },
 ];
+
 export default function SearchDemo() {
-  const [selectedGraph, setSelectedGraph] =
-    useState<keyof typeof graphs>("tree");
+  const [selectedGraph, setSelectedGraph] = useState<string>("tree");
   const [algorithmId, setAlgorithmId] = useState<string>("bfs");
   const [stoppingCriterion, setStoppingCriterion] = useState<string>("late");
   const [loopBreaking, setLoopBreaking] = useState<string>("on");
-  const [startNode, setStartNode] = useState<string>("A");
-  const [goalNode, setGoalNode] = useState<string>("I");
+  const [startNode, setStartNode] = useState<string>("S");
+  const [goalNode, setGoalNode] = useState<string>("G");
   const [searchState, setSearchState] = useState<SearchState>({
     steps: [],
     currentStepIndex: -1,
@@ -159,6 +79,15 @@ export default function SearchDemo() {
 
   const currentGraph = graphs[selectedGraph];
   const currentAlgorithm = getAlgorithmById(algorithmId);
+
+  // Update start/goal nodes when graph changes
+  useEffect(() => {
+    const defaults = defaultNodes[selectedGraph];
+    if (defaults) {
+      setStartNode(defaults.start);
+      setGoalNode(defaults.goal);
+    }
+  }, [selectedGraph]);
 
   // Build adjacency list
   const buildAdjacencyList = useCallback(() => {
@@ -216,9 +145,7 @@ export default function SearchDemo() {
       }
 
       const nextStep = prev.steps[nextIndex];
-      const isComplete =
-        nextStep &&
-        (nextStep.finalPath !== undefined || nextStep.currentNode === goalNode);
+      const isComplete = nextStep && nextStep.stepType === "goal_found";
 
       return {
         ...prev,
@@ -226,7 +153,7 @@ export default function SearchDemo() {
         isComplete,
       };
     });
-  }, [goalNode]);
+  }, []);
 
   // Reset when parameters change
   useEffect(() => {
@@ -260,12 +187,16 @@ export default function SearchDemo() {
       if (nodeId === goalNode) return "goal";
       return "unvisited";
     }
-
+    if (
+      currentStep.stepType === "take_from_frontier" &&
+      currentStep.currentNode === nodeId
+    )
+      return "current";
     if (nodeId === startNode) return "start";
     if (nodeId === goalNode) return "goal";
     if (currentStep.finalPath && currentStep.finalPath.includes(nodeId))
       return "path";
-    if (currentStep.currentNode === nodeId) return "current";
+
     if (currentStep.visited.has(nodeId)) return "visited";
     if (currentStep.frontier.includes(nodeId)) return "frontier";
     return "unvisited";
@@ -275,12 +206,12 @@ export default function SearchDemo() {
   const getNodeStyle = (state: NodeState) => {
     const baseStyle = "transition-all duration-500 ease-in-out";
     switch (state) {
+      case "current":
+        return `${baseStyle} fill-orange-400 stroke-orange-600 stroke-3`;
       case "start":
         return `${baseStyle} fill-red-500 stroke-red-700 stroke-3`;
       case "goal":
         return `${baseStyle} fill-green-500 stroke-green-700 stroke-3`;
-      case "current":
-        return `${baseStyle} fill-orange-400 stroke-orange-600 stroke-3 animate-pulse`;
       case "frontier":
         return `${baseStyle} fill-yellow-300 stroke-yellow-500 stroke-2`;
       case "visited":
@@ -292,19 +223,38 @@ export default function SearchDemo() {
     }
   };
 
-  // Check if edge should show arrow
-  const shouldShowArrow = (from: string, to: string): boolean => {
+  // Check if edge should be highlighted
+  const shouldHighlightEdge = (
+    from: string,
+    to: string
+  ): "highlight" | "path" | "explore" | "none" => {
     const currentStep = getCurrentStep();
-    if (!currentStep || !currentStep.exploredEdge) return false;
+    if (!currentStep) return "none";
 
-    // Don't show orange arrow if this edge is part of the final path
-    if (currentStep.finalPath && shouldShowPathEdge(from, to)) return false;
+    // Path edges take priority
+    if (currentStep.finalPath && shouldShowPathEdge(from, to)) return "path";
 
-    // Only show arrow in the correct direction: from parent to child
-    return (
-      currentStep.exploredEdge.from === from &&
-      currentStep.exploredEdge.to === to
-    );
+    // Exploration arrow
+    if (
+      currentStep.exploredEdge &&
+      ((currentStep.exploredEdge.from === from &&
+        currentStep.exploredEdge.to === to) ||
+        (currentStep.exploredEdge.from === to &&
+          currentStep.exploredEdge.to === from))
+    )
+      return "explore";
+
+    // Highlighted edges
+    if (currentStep.highlightedEdges) {
+      const isHighlighted = currentStep.highlightedEdges.some(
+        (edge) =>
+          (edge.from === from && edge.to === to) ||
+          (edge.from === to && edge.to === from)
+      );
+      if (isHighlighted) return "highlight";
+    }
+
+    return "none";
   };
 
   const shouldShowPathEdge = (from: string, to: string): boolean => {
@@ -325,14 +275,15 @@ export default function SearchDemo() {
 
   // Get edge style
   const getEdgeStyle = (from: string, to: string) => {
-    // Path edges take priority over exploration arrows
-    if (shouldShowPathEdge(from, to)) {
-      return "stroke-purple-500 stroke-4";
+    const edgeType = shouldHighlightEdge(from, to);
+    switch (edgeType) {
+      case "path":
+        return "stroke-purple-500 stroke-4";
+      case "highlight":
+        return "stroke-blue-500 stroke-3 animate-pulse";
+      default:
+        return "stroke-gray-400 stroke-2";
     }
-    if (shouldShowArrow(from, to)) {
-      return "stroke-orange-500 stroke-4 animate-pulse";
-    }
-    return "stroke-gray-400 stroke-2";
   };
 
   const canTakeNextStep =
@@ -343,16 +294,10 @@ export default function SearchDemo() {
   const selectedLoopBreakingOption = loopBreakingOptions.find(
     (option) => option.value === loopBreaking
   );
+  const currentStep = getCurrentStep();
 
   return (
     <div className="w-full max-w-6xl mx-auto p-6 space-y-6">
-      <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold">Search Algorithms Step-by-Step</h1>
-        <p className="text-muted-foreground">
-          See how different algorithms explore graphs
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Controls */}
         <Card className="lg:col-span-1">
@@ -365,12 +310,7 @@ export default function SearchDemo() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Graph Type</label>
-              <Select
-                value={selectedGraph}
-                onValueChange={(value: keyof typeof graphs) =>
-                  setSelectedGraph(value)
-                }
-              >
+              <Select value={selectedGraph} onValueChange={setSelectedGraph}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -495,6 +435,35 @@ export default function SearchDemo() {
                 Goal Found!
               </div>
             )}
+
+            {/* Current Step Info */}
+            {currentStep && (
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                <div className="text-sm text-gray-600 mb-2">
+                  {currentStep.description}
+                </div>
+                {/* Path Queue Display */}
+                <div className="mt-3">
+                  <div className="text-xs font-medium text-gray-700 mb-1">
+                    Path Queue ({algorithmId.toUpperCase()}):
+                  </div>
+                  <div className="text-xs text-gray-600 space-y-1 max-h-20 overflow-y-auto">
+                    {currentStep.pathQueue.length > 0 ? (
+                      currentStep.pathQueue.map((path, index) => (
+                        <div
+                          key={index}
+                          className="bg-white px-2 py-1 rounded border"
+                        >
+                          {path.join(" → ")}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-gray-400 italic">Empty</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -504,15 +473,9 @@ export default function SearchDemo() {
             <CardTitle>Graph Exploration</CardTitle>
             <CardDescription>
               {searchState.isComplete
-                ? `${currentAlgorithm?.name} (${
-                    selectedStoppingOption?.label
-                  }, Loop Breaking ${
-                    selectedLoopBreakingOption?.label
-                  }) found the goal in ${
-                    searchState.currentStepIndex + 1
-                  } steps!`
+                ? `${currentAlgorithm?.name} found the goal!`
                 : canTakeNextStep
-                ? `${currentAlgorithm?.name} (${selectedStoppingOption?.label}, Loop Breaking ${selectedLoopBreakingOption?.label}) is exploring... Click 'Next Step' to continue`
+                ? `${currentAlgorithm?.name} is exploring step by step...`
                 : searchState.steps.length > 0
                 ? "Ready to start - Click 'Next Step' to begin"
                 : "Exploration complete"}
@@ -529,7 +492,7 @@ export default function SearchDemo() {
                   const toNode = currentGraph.nodes.find(
                     (n) => n.id === edge.to
                   )!;
-                  const showArrow = shouldShowArrow(edge.from, edge.to);
+                  const edgeType = shouldHighlightEdge(edge.from, edge.to);
 
                   return (
                     <g key={index}>
@@ -540,31 +503,50 @@ export default function SearchDemo() {
                         y2={toNode.y}
                         className={getEdgeStyle(edge.from, edge.to)}
                       />
-                      {showArrow && (
-                        <g>
-                          <defs>
-                            <marker
-                              id={`arrow-${index}`}
-                              viewBox="0 0 10 10"
-                              refX="9"
-                              refY="3"
-                              markerWidth="6"
-                              markerHeight="6"
-                              orient="auto"
-                            >
-                              <path d="M0,0 L0,6 L9,3 z" fill="#f97316" />
-                            </marker>
-                          </defs>
-                          <line
-                            x1={fromNode.x}
-                            y1={fromNode.y}
-                            x2={toNode.x}
-                            y2={toNode.y}
-                            className="stroke-orange-500 stroke-4"
-                            markerEnd={`url(#arrow-${index})`}
-                          />
-                        </g>
-                      )}
+                      {edgeType === "explore" &&
+                        currentStep?.exploredEdge &&
+                        ((edge.from === currentStep.exploredEdge.from &&
+                          edge.to === currentStep.exploredEdge.to) ||
+                          (edge.from === currentStep.exploredEdge.to &&
+                            edge.to === currentStep.exploredEdge.from)) && (
+                          <g>
+                            <defs>
+                              <marker
+                                id={`arrow-${index}`}
+                                viewBox="0 0 10 10"
+                                refX="9"
+                                refY="3"
+                                markerWidth="6"
+                                markerHeight="6"
+                                orient="auto"
+                              >
+                                <path d="M0,0 L0,6 L9,3 z" fill="#f97316" />
+                              </marker>
+                            </defs>
+                            <line
+                              x1={
+                                edge.from === currentStep.exploredEdge.from
+                                  ? fromNode.x
+                                  : toNode.x
+                              }
+                              y1={
+                                edge.from === currentStep.exploredEdge.from
+                                  ? fromNode.y
+                                  : toNode.y
+                              }
+                              x2={
+                                edge.from === currentStep.exploredEdge.from
+                                  ? toNode.x
+                                  : fromNode.x
+                              }
+                              y2={
+                                edge.from === currentStep.exploredEdge.from
+                                  ? toNode.y
+                                  : fromNode.y
+                              }
+                            />
+                          </g>
+                        )}
                     </g>
                   );
                 })}
@@ -610,23 +592,11 @@ export default function SearchDemo() {
                   <div className="w-4 h-4 bg-orange-400 rounded-full"></div>
                   <span>Currently Processing</span>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-yellow-300 rounded-full"></div>
-                  <span>In Frontier (Waiting)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-blue-400 rounded-full"></div>
-                  <span>Already Visited</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-orange-500 rounded-sm"></div>
-                  <span>Current Exploration Path</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-purple-500 rounded-full"></div>
-                  <span>Solution Path</span>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-yellow-300 rounded-full"></div>
+                    <span>In Frontier</span>
+                  </div>
                 </div>
               </div>
             </div>
