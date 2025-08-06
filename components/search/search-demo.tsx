@@ -188,10 +188,12 @@ export default function SearchDemo() {
       return "unvisited";
     }
     if (
-      currentStep.stepType === "take_from_frontier" &&
-      currentStep.currentNode === nodeId
-    )
+      currentStep.currentNode === nodeId &&
+      currentStep.stepType !== "goal_found"
+    ) {
       return "current";
+    }
+
     if (nodeId === startNode) return "start";
     if (nodeId === goalNode) return "goal";
     if (currentStep.finalPath && currentStep.finalPath.includes(nodeId))
