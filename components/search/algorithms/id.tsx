@@ -12,161 +12,201 @@ function executeIterativeDeepening(
   const MAX_STEPS = 1000;
   const MAX_DEPTH = 50;
 
+  steps.push({
+    stepType: "start",
+    currentNode: startNode,
+    visited: new Set<string>(),
+    frontier: [startNode],
+    parent: {},
+    pathQueue: [[startNode]],
+    description: ``,
+  });
+
   function depthLimitedSearch(
-    currentPath: string[],
-    depth: number,
-    visited: Set<string>,
-    currentDepthLimit: number,
-    activePaths: string[][]
+    currentDepthLimit: number
   ): "found" | "cutoff" | "failure" {
-    stepCounter++;
-    if (stepCounter >= MAX_STEPS) return "failure";
-
-    const currentNode = currentPath[currentPath.length - 1];
-    const updatedActivePaths = activePaths.filter(
-      (p) => p.join() !== currentPath.join()
-    );
-
-    steps.push({
-      stepType: "take_from_frontier",
-      currentNode,
-      visited: new Set(visited),
-      frontier: [currentNode],
-      parent: {},
-      pathQueue: [...updatedActivePaths],
-      takenNode: currentNode,
-      exploredEdge:
-        currentPath.length > 1
-          ? { from: currentPath[currentPath.length - 2], to: currentNode }
-          : undefined,
-      description: `Exploring path: ${currentPath.join(" → ")} (depth ${
-        currentPath.length - 1
-      }/${currentDepthLimit})`,
-    });
-
-    if (currentNode === goalNode) {
-      steps.push({
-        stepType: "goal_found",
-        currentNode,
-        visited: new Set(visited),
-        frontier: [],
-        parent: {},
-        pathQueue: [...updatedActivePaths],
-        finalPath: currentPath,
-        description: `Goal ${goalNode} found at depth ${
-          currentPath.length - 1
-        }! Final path: ${currentPath.join(" → ")}`,
-      });
-      return "found";
-    }
-
-    if (depth <= 0) {
-      steps.push({
-        stepType: "add_to_frontier",
-        currentNode,
-        visited: new Set(visited),
-        frontier: [],
-        parent: {},
-        pathQueue: [...updatedActivePaths],
-        addedNodes: [],
-        description: `Depth limit ${currentDepthLimit} reached at node ${currentNode}`,
-      });
-      return "cutoff";
-    }
-
-    const newVisited = loopBreaking
-      ? new Set([...visited, currentNode])
-      : visited;
-
-    const neighbors = (adjList[currentNode] || []).sort();
-
-    steps.push({
-      stepType: "highlight_edges",
-      currentNode,
-      visited: new Set(newVisited),
-      frontier: neighbors,
-      parent: {},
-      pathQueue: [...updatedActivePaths],
-      highlightedEdges: neighbors.map((neighbor) => ({
-        from: currentNode,
-        to: neighbor,
-      })),
-      description: `Exploring neighbors of ${currentNode}: ${neighbors.join(
-        ", "
-      )} at depth ${currentPath.length - 1}`,
-    });
-
     let cutoffOccurred = false;
+    let activePaths: string[][] = [[startNode]];
 
-    const validNeighbors = loopBreaking
-      ? neighbors.filter((n) => !newVisited.has(n))
-      : neighbors; // ← dus hier géén filtering meer op `currentPath.includes`!
+    while (activePaths.length > 0 && stepCounter < MAX_STEPS) {
+      stepCounter++;
 
-    if (validNeighbors.length > 0) {
-      const newPaths = validNeighbors.map((n) => [...currentPath, n]);
+      // Take the last path (stack behavior)
+      const currentPath = activePaths.pop()!;
+      const currentNode = currentPath[currentPath.length - 1];
+      const currentDepth = currentPath.length - 1;
 
-      // FIX: gebruik stackgedrag — voeg nieuwe paden BOVENAAN toe
-      const nextActivePaths = [...newPaths, ...updatedActivePaths];
+      // Build visited set from current path (for loop breaking)
+      const visited = loopBreaking
+        ? new Set<string>(currentPath)
+        : new Set<string>();
 
+      // Get all frontier nodes (last node of each remaining path)
+      const frontierNodes = activePaths.map((path) => path[path.length - 1]);
+
+      // Take path from stack - removed path is no longer in queue
       steps.push({
-        stepType: "add_to_frontier",
+        stepType: "take_from_frontier",
         currentNode,
-        visited: new Set(newVisited),
-        frontier: validNeighbors,
+        visited,
+        frontier: frontierNodes, // Only remaining frontier nodes
         parent: {},
-        pathQueue: nextActivePaths,
-        addedNodes: validNeighbors,
-        description: `Adding to frontier:\n${newPaths
-          .map((p) => p.join(" → "))
-          .join(", \n")}`,
+        pathQueue: [...activePaths], // Only remaining paths
+        takenNode: currentNode,
+        exploredEdge:
+          currentPath.length > 1
+            ? { from: currentPath[currentPath.length - 2], to: currentNode }
+            : undefined,
+        description: `Taking path from queue: ${currentPath.join(
+          " → "
+        )} (depth ${currentDepth}/${currentDepthLimit})`,
       });
 
-      if (earlyStop && validNeighbors.includes(goalNode)) {
-        const goalPath = [...currentPath, goalNode];
+      // Goal test
+      if (currentNode === goalNode) {
         steps.push({
           stepType: "goal_found",
-          currentNode: goalNode,
-          visited: new Set(newVisited),
+          currentNode,
+          visited,
           frontier: [],
           parent: {},
-          pathQueue: nextActivePaths,
-          finalPath: goalPath,
-          description: `Goal ${goalNode} found in neighbors! Path: ${goalPath.join(
+          pathQueue: [currentPath],
+          finalPath: currentPath,
+          description: `Goal ${goalNode} found at depth ${currentDepth}! Path: ${currentPath.join(
             " → "
           )}`,
         });
         return "found";
       }
 
-      for (const neighbor of validNeighbors) {
-        const result = depthLimitedSearch(
-          [...currentPath, neighbor],
-          depth - 1,
-          newVisited,
-          currentDepthLimit,
-          nextActivePaths
-        );
-        if (result === "found") return "found";
-        if (result === "cutoff") cutoffOccurred = true;
+      // Depth limit reached
+      if (currentDepth >= currentDepthLimit) {
+        steps.push({
+          stepType: "add_to_frontier",
+          currentNode,
+          visited,
+          frontier: frontierNodes,
+          parent: {},
+          pathQueue: [...activePaths],
+          addedNodes: [],
+          description: `Depth limit ${currentDepthLimit} reached at ${currentNode}`,
+        });
+        cutoffOccurred = true;
+        continue;
       }
-    } else {
+
+      // Explore neighbors
+      const neighbors = (adjList[currentNode] || []).sort();
+
       steps.push({
-        stepType: "add_to_frontier",
+        stepType: "highlight_edges",
         currentNode,
-        visited: new Set(newVisited),
-        frontier: [],
+        visited,
+        frontier: frontierNodes,
         parent: {},
-        pathQueue: [...updatedActivePaths],
-        addedNodes: [],
-        description: `No valid neighbors to explore from ${currentNode} ${
-          loopBreaking ? "(all visited)" : "(cycle allowed, but none found)"
-        }`,
+        pathQueue: [...activePaths],
+        highlightedEdges: neighbors.map((neighbor) => ({
+          from: currentNode,
+          to: neighbor,
+        })),
+        description: `Exploring neighbors of ${currentNode}: ${neighbors.join(
+          ", "
+        )} at depth ${currentDepth}`,
       });
+
+      // Filter valid neighbors
+      let validNeighbors = neighbors;
+      if (loopBreaking) {
+        validNeighbors = neighbors.filter(
+          (neighbor) => !currentPath.includes(neighbor)
+        );
+        // } else {
+        //   // Even without loop breaking, avoid immediate cycles in current path
+        //   validNeighbors = neighbors.filter(
+        //     (neighbor) =>
+        //       currentPath.length === 1 ||
+        //       neighbor !== currentPath[currentPath.length - 2]
+        //   );
+      }
+
+      if (validNeighbors.length > 0) {
+        // Early stopping check
+        if (earlyStop && validNeighbors.includes(goalNode)) {
+          const goalPath = [...currentPath, goalNode];
+
+          steps.push({
+            stepType: "add_to_frontier",
+            currentNode,
+            visited,
+            frontier: [...frontierNodes, goalNode],
+            parent: {},
+            pathQueue: [...activePaths, goalPath],
+            addedNodes: [goalNode],
+            description: `Adding goal path: ${goalPath.join(" → ")}`,
+          });
+
+          steps.push({
+            stepType: "goal_found",
+            currentNode: goalNode,
+            visited,
+            frontier: [],
+            parent: {},
+            pathQueue: [goalPath],
+            finalPath: goalPath,
+            description: `Goal ${goalNode} found in neighbors! Path: ${goalPath.join(
+              " → "
+            )}`,
+          });
+          return "found";
+        }
+
+        // Add new paths to explore (in reverse order for DFS-like behavior)
+        const newPaths = validNeighbors
+          .reverse()
+          .map((neighbor) => [...currentPath, neighbor]);
+        activePaths.push(...newPaths);
+
+        // Update frontier nodes after adding new paths
+        const updatedFrontierNodes = activePaths.map(
+          (path) => path[path.length - 1]
+        );
+
+        steps.push({
+          stepType: "add_to_frontier",
+          currentNode,
+          visited,
+          frontier: updatedFrontierNodes,
+          parent: {},
+          pathQueue: [...activePaths],
+          addedNodes: validNeighbors,
+          description: `Adding ${
+            newPaths.length
+          } new paths to queue:\n${newPaths
+            .map((path) => path.join(" → "))
+            .join("\n")}`,
+        });
+      } else {
+        steps.push({
+          stepType: "add_to_frontier",
+          currentNode,
+          visited,
+          frontier: frontierNodes,
+          parent: {},
+          pathQueue: [...activePaths],
+          addedNodes: [],
+          description: `No valid neighbors from ${currentNode} ${
+            loopBreaking
+              ? "(would create cycle)"
+              : "(would backtrack immediately)"
+          }`,
+        });
+      }
     }
 
     return cutoffOccurred ? "cutoff" : "failure";
   }
 
+  // Main iterative deepening loop
   for (
     let depthLimit = 0;
     depthLimit <= MAX_DEPTH && stepCounter < MAX_STEPS;
@@ -175,43 +215,49 @@ function executeIterativeDeepening(
     steps.push({
       stepType: "start",
       currentNode: startNode,
-      visited: new Set(),
+      visited: new Set<string>(),
       frontier: [startNode],
       parent: {},
       pathQueue: [[startNode]],
       description: `Starting depth-limited search with limit ${depthLimit}`,
     });
 
-    const result = depthLimitedSearch(
-      [startNode],
-      depthLimit,
-      new Set(),
-      depthLimit,
-      [[startNode]]
-    );
+    const result = depthLimitedSearch(depthLimit);
 
-    if (result === "found") break;
-
-    steps.push({
-      stepType: "add_to_frontier",
-      currentNode: "",
-      visited: new Set(),
-      frontier: [],
-      parent: {},
-      pathQueue: [],
-      addedNodes: [],
-      description:
-        result === "cutoff"
-          ? `Increase depth limit to ${depthLimit + 1}`
-          : `No solution exists at depth ${depthLimit} - trying deeper...`,
-    });
+    if (result === "found") {
+      break;
+    } else if (result === "failure") {
+      steps.push({
+        stepType: "add_to_frontier",
+        currentNode: "",
+        visited: new Set<string>(),
+        frontier: [],
+        parent: {},
+        pathQueue: [],
+        addedNodes: [],
+        description: `No solution exists at depth ${depthLimit} - need to increase limit`,
+      });
+    } else if (result === "cutoff") {
+      steps.push({
+        stepType: "add_to_frontier",
+        currentNode: "",
+        visited: new Set<string>(),
+        frontier: [],
+        parent: {},
+        pathQueue: [],
+        addedNodes: [],
+        description: `Depth limit ${depthLimit} reached - increasing to ${
+          depthLimit + 1
+        }`,
+      });
+    }
   }
 
   if (stepCounter >= MAX_STEPS) {
     steps.push({
       stepType: "add_to_frontier",
       currentNode: "",
-      visited: new Set(),
+      visited: new Set<string>(),
       frontier: [],
       parent: {},
       pathQueue: [],
