@@ -14,7 +14,7 @@ export default function SideNav() {
         href="/mainpage"
         className="flex h-16 items-center justify-start px-4 bg-blue-600"
       >
-        <span className="text-lg font-semibold tracking-wide text-white">
+        <span className="text-lg font-bold tracking-wide text-white">
           Artificiële&nbsp;intelligentie
         </span>
       </Link>

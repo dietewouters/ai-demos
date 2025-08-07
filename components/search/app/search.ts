@@ -29,7 +29,8 @@ export interface Algorithm {
     goalNode: string,
     earlyStop?: boolean,
     loopBreaking?: boolean,
-    graphId?: string
+    graphId?: string,
+    extra?: { [key: string]: any }
   ) => SearchStep[];
 }
 

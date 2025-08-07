@@ -77,7 +77,7 @@ export default function NavLinks() {
             exactActive && "bg-sky-100 text-blue-600",
             descendantActive && "bg-sky-50 text-blue-600",
             !exactActive && !descendantActive && "hover:bg-gray-100",
-            depth > 0 && "before:content-['•'] before:mr-2 before:text-gray-400"
+            depth > 0 && "before:mr-2 before:text-gray-400"
           )}
           style={{ paddingLeft: indent + 16 }}
         >

@@ -76,6 +76,7 @@ export default function SearchDemo() {
     currentStepIndex: -1,
     isComplete: false,
   });
+  const [beamWidth, setBeamWidth] = useState<number>(2);
 
   const currentGraph = graphs[selectedGraph];
   const currentAlgorithm = getAlgorithmById(algorithmId);
@@ -115,7 +116,8 @@ export default function SearchDemo() {
       goalNode,
       earlyStop,
       useLoopBreaking,
-      selectedGraph
+      selectedGraph,
+      { beamWidth }
     );
   }, [
     currentAlgorithm,
@@ -124,6 +126,7 @@ export default function SearchDemo() {
     buildAdjacencyList,
     stoppingCriterion,
     loopBreaking,
+    beamWidth,
   ]);
 
   // Reset search state
@@ -167,6 +170,7 @@ export default function SearchDemo() {
     goalNode,
     stoppingCriterion,
     loopBreaking,
+    beamWidth,
   ]);
 
   // Get current step data
@@ -344,47 +348,77 @@ export default function SearchDemo() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-1">
+            {(algorithmId === "greedy" ||
+              algorithmId === "dfs" ||
+              algorithmId === "bfs" ||
+              algorithmId === "idd") && (
+              <div className="grid grid-cols-1">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Stopping</label>
+                  <Select
+                    value={stoppingCriterion}
+                    onValueChange={setStoppingCriterion}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stoppingOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {(algorithmId === "greedy" ||
+              algorithmId === "dfs" ||
+              algorithmId === "bfs" ||
+              algorithmId === "idd") && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">Stopping</label>
-                <Select
-                  value={stoppingCriterion}
-                  onValueChange={setStoppingCriterion}
-                >
+                <label className="text-sm font-medium">Loop Breaking</label>
+                <Select value={loopBreaking} onValueChange={setLoopBreaking}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {stoppingOptions.map((option) => (
+                    {loopBreakingOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {selectedLoopBreakingOption && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedLoopBreakingOption.description}
+                  </p>
+                )}
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Loop Breaking</label>
-              <Select value={loopBreaking} onValueChange={setLoopBreaking}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {loopBreakingOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedLoopBreakingOption && (
-                <p className="text-xs text-muted-foreground">
-                  {selectedLoopBreakingOption.description}
-                </p>
-              )}
-            </div>
+            )}
+            {algorithmId === "beam" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Beam Width</label>
+                <Select
+                  value={beamWidth.toString()}
+                  onValueChange={(value) => setBeamWidth(Number(value))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3].map((w) => (
+                      <SelectItem key={w} value={w.toString()}>
+                        {w}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
