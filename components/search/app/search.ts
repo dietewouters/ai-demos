@@ -50,4 +50,5 @@ export interface Graph {
   nodes: GraphNode[];
   edges: GraphEdge[];
   heuristics?: { [key: string]: number }; // Optional heuristic
+  costs?: { from: string; to: string; cost: number }[]; // Optional costs for weighted graphs
 }

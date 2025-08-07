@@ -609,7 +609,7 @@ export default function SearchDemo() {
                       >
                         {node.id}
                       </text>
-                      {algorithmId === "greedy" &&
+                      {(algorithmId === "greedy" || algorithmId === "ucs") &&
                         heuristicValue !== undefined && (
                           <text
                             x={node.x - 20}
