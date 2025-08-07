@@ -59,6 +59,21 @@ export const graphs: Record<string, Graph> = {
       { from: "F", to: "L" },
       { from: "L", to: "G" },
     ],
+    heuristics: {
+      S: 18,
+      A: 15,
+      B: 12,
+      C: 9,
+      D: 5,
+      E: 5,
+      F: 3,
+      G: 0,
+      H: 4,
+      I: 3,
+      J: 2,
+      K: 1,
+      L: 1,
+    },
   },
   network: {
     name: "Session 2: ex. 1.1",
@@ -84,6 +99,7 @@ export const graphs: Record<string, Graph> = {
       { from: "D", to: "F" },
       { from: "F", to: "G" },
     ],
+    heuristics: { S: 17, A: 10, B: 13, C: 4, D: 2, E: 4, F: 1, G: 0 },
   },
   ex2: {
     name: "Session 2: ex. 1.2",
@@ -104,6 +120,7 @@ export const graphs: Record<string, Graph> = {
       { from: "B", to: "G" },
       { from: "C", to: "G" },
     ],
+    heuristics: { S: 5, A: 3, B: 4, C: 3, D: 1, G: 0 },
   },
 };
 
@@ -111,5 +128,5 @@ export const graphs: Record<string, Graph> = {
 export const defaultNodes: Record<string, { start: string; goal: string }> = {
   tree: { start: "S", goal: "G" },
   network: { start: "S", goal: "G" },
-  session2: { start: "S", goal: "G" },
+  ex2: { start: "S", goal: "G" },
 };

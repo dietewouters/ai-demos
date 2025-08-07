@@ -28,7 +28,8 @@ export interface Algorithm {
     startNode: string,
     goalNode: string,
     earlyStop?: boolean,
-    loopBreaking?: boolean
+    loopBreaking?: boolean,
+    graphId?: string
   ) => SearchStep[];
 }
 
@@ -47,4 +48,5 @@ export interface Graph {
   name: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
+  heuristics?: { [key: string]: number }; // Optional heuristic
 }

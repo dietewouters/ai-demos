@@ -114,7 +114,8 @@ export default function SearchDemo() {
       startNode,
       goalNode,
       earlyStop,
-      useLoopBreaking
+      useLoopBreaking,
+      selectedGraph
     );
   }, [
     currentAlgorithm,
@@ -556,6 +557,7 @@ export default function SearchDemo() {
                 {/* Nodes */}
                 {currentGraph.nodes.map((node) => {
                   const state = getNodeState(node.id);
+                  const heuristicValue = currentGraph.heuristics?.[node.id];
                   return (
                     <g key={node.id}>
                       <circle
@@ -573,6 +575,17 @@ export default function SearchDemo() {
                       >
                         {node.id}
                       </text>
+                      {algorithmId === "greedy" &&
+                        heuristicValue !== undefined && (
+                          <text
+                            x={node.x - 20}
+                            y={node.y - 25}
+                            textAnchor="middle"
+                            className="text-xs fill-gray-700"
+                          >
+                            h: {heuristicValue}
+                          </text>
+                        )}
                     </g>
                   );
                 })}
