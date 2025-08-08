@@ -148,7 +148,7 @@ export const graphs: Record<string, Graph> = {
       { from: "B", to: "G" },
       { from: "C", to: "G" },
     ],
-    heuristics: { S: 5, A: 3, B: 4, C: 3, D: 1, G: 0 },
+    heuristics: { S: 0, A: 0, B: 4, C: 3, D: 0, G: 0 },
     costs: [
       { from: "S", to: "A", cost: 10 },
       { from: "S", to: "B", cost: 8 },

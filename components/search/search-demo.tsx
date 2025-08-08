@@ -506,6 +506,22 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                 </div>
               </div>
             )}
+            {algorithmId === "idastar" &&
+              (currentStep?.bound !== undefined ||
+                currentStep?.fNew !== undefined) && (
+                <div className="text-xs text-gray-500 mb-2">
+                  {currentStep?.bound !== undefined && (
+                    <>f-bound: {currentStep.bound}</>
+                  )}
+                  {currentStep?.fNew !== undefined && (
+                    <>
+                      {" "}
+                      | f-new:{" "}
+                      {currentStep.fNew === Infinity ? "∞" : currentStep.fNew}
+                    </>
+                  )}
+                </div>
+              )}
           </CardContent>
         </Card>
 
@@ -555,7 +571,9 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                       />
 
                       {/* UCS Edge Cost */}
-                      {(algorithmId === "ucs" || algorithmId === "astar") && (
+                      {(algorithmId === "ucs" ||
+                        algorithmId === "astar" ||
+                        algorithmId === "idastar") && (
                         <text
                           x={
                             (fromNode.x + toNode.x) / 2 +
@@ -600,7 +618,9 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                       >
                         {node.id}
                       </text>
-                      {(algorithmId === "greedy" || algorithmId === "astar") &&
+                      {(algorithmId === "greedy" ||
+                        algorithmId === "astar" ||
+                        algorithmId === "idastar") &&
                         heuristicValue !== undefined && (
                           <text
                             x={node.x - 20}

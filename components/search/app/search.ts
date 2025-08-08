@@ -17,6 +17,8 @@ export interface SearchStep {
   exploredEdge?: { from: string; to: string };
   finalPath?: string[];
   description: string;
+  bound?: number;
+  fNew?: number;
 }
 
 export interface Algorithm {

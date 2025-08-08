@@ -5,6 +5,7 @@ import { Greedy } from "./greedy";
 import { Beam } from "./beam";
 import { UCS } from "./ucs";
 import { AStar } from "./Aster";
+import { IDAStar } from "./idastar";
 import type { Algorithm } from "../algorithms/types";
 
 export const algorithms: Algorithm[] = [
@@ -15,6 +16,7 @@ export const algorithms: Algorithm[] = [
   Beam,
   UCS,
   AStar,
+  IDAStar,
 ];
 
 export const getAlgorithmById = (id: string): Algorithm | undefined => {
