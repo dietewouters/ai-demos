@@ -5,6 +5,11 @@
     "trainingFile": "/data/exercise1.txt"
   },
   {
+    "name": "Exercise4",
+    "displayName": "Exercise 4",
+    "trainingFile": "/data/exercise4.txt"
+  },
+  {
     "name": "katvandeburen",
     "displayName": "De hond van de man van de buren...",
     "trainingText": "De hond van de man van de buren van de kat beet de man van de kat van de buren"
