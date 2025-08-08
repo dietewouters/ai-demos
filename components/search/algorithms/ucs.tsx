@@ -116,8 +116,14 @@ function executeUCS(
 
     for (const neighbor of neighbors) {
       const tentativeG = gCost + getCost(currentNode, neighbor);
+      const existing = frontier.find((f) => f.node === neighbor);
 
-      if (tentativeG < (gScore[neighbor] ?? Infinity)) {
+      if (!existing || tentativeG < existing.cost) {
+        if (existing) {
+          const index = frontier.indexOf(existing);
+          frontier.splice(index, 1);
+        }
+
         gScore[neighbor] = tentativeG;
         parent[neighbor] = currentNode;
 
@@ -165,10 +171,11 @@ function executeUCS(
       description:
         addedNeighbors.length === 0
           ? `No new nodes added to frontier.`
-          : `Adding to frontier:\n${frontier
-              .filter((f) => addedNeighbors.includes(f.node))
-              .map((f) => `${f.path.join(" → ")} (cost: ${f.cost})`)
-              .join(",\n")}`,
+          : `Adding to frontier:
+${frontier
+  .filter((f) => addedNeighbors.includes(f.node))
+  .map((f) => `${f.path.join(" → ")} (cost: ${f.cost})`)
+  .join(",\n")}`,
     });
   }
 

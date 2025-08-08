@@ -159,6 +159,33 @@ export const graphs: Record<string, Graph> = {
       { from: "C", to: "G", cost: 5 },
     ],
   },
+  exa: {
+    name: "First example on A* Search",
+    nodes: [
+      { id: "S", x: 150, y: 100 },
+      { id: "A", x: 50, y: 200 },
+      { id: "B", x: 250, y: 200 },
+      { id: "C", x: 350, y: 100 },
+      { id: "G", x: 450, y: 200 },
+    ],
+    edges: [
+      { from: "S", to: "A" },
+      { from: "S", to: "B" },
+      { from: "A", to: "B" },
+      { from: "B", to: "G" },
+      { from: "C", to: "G" },
+      { from: "C", to: "B" },
+    ],
+    heuristics: { S: 7, A: 10, B: 9, C: 5, G: 0 },
+    costs: [
+      { from: "S", to: "A", cost: 1 },
+      { from: "S", to: "B", cost: 1 },
+      { from: "A", to: "B", cost: 9 },
+      { from: "B", to: "G", cost: 12 },
+      { from: "C", to: "G", cost: 5 },
+      { from: "C", to: "B", cost: 6 },
+    ],
+  },
 };
 
 // Default start/goal nodes for each graph
@@ -166,4 +193,5 @@ export const defaultNodes: Record<string, { start: string; goal: string }> = {
   tree: { start: "S", goal: "G" },
   network: { start: "S", goal: "G" },
   ex2: { start: "S", goal: "G" },
+  exa: { start: "S", goal: "G" },
 };

@@ -25,8 +25,6 @@ function executeAStar(
   const getCost = (from: string, to: string) =>
     costs.get(`${from}->${to}`) ?? 1;
 
-  const gScore: Record<string, number> = { [startNode]: 0 };
-
   type FrontierItem = {
     node: string;
     path: string[];
@@ -103,7 +101,7 @@ function executeAStar(
 
     const neighbors = (adjList[currentNode] || []).filter((n) => {
       if (!loopBreaking) return true;
-      return !visited.has(n);
+      return !visited.has(n) && !currentPath.includes(n);
     });
 
     steps.push({
@@ -119,24 +117,28 @@ function executeAStar(
       )}`,
     });
 
-    const addedNeighbors: string[] = [];
+    const addedNodes: string[] = [];
 
     for (const neighbor of neighbors) {
-      const tentativeG = gCost + getCost(currentNode, neighbor);
+      const newCost = gCost + getCost(currentNode, neighbor);
+      const existing = frontier.find((f) => f.node === neighbor);
 
-      if (tentativeG < (gScore[neighbor] ?? Infinity)) {
-        gScore[neighbor] = tentativeG;
+      if (!existing || newCost < existing.cost) {
+        if (existing) {
+          const index = frontier.indexOf(existing);
+          frontier.splice(index, 1);
+        }
+
         parent[neighbor] = currentNode;
-
         const newPath = [...currentPath, neighbor];
         frontier.push({
           node: neighbor,
           path: newPath,
-          cost: tentativeG,
+          cost: newCost,
           heuristic: heuristic(neighbor),
         });
 
-        addedNeighbors.push(neighbor);
+        addedNodes.push(neighbor);
 
         if (earlyStop && neighbor === goalNode) {
           steps.push({
@@ -160,8 +162,7 @@ function executeAStar(
       stepType: "add_to_frontier",
       currentNode,
       visited: new Set(visited),
-      frontier: frontier
-        .slice()
+      frontier: [...frontier]
         .sort((a, b) => a.cost + a.heuristic - (b.cost + b.heuristic))
         .map((f) => f.node),
       parent: { ...parent },
@@ -169,19 +170,19 @@ function executeAStar(
         .slice()
         .sort((a, b) => a.cost + a.heuristic - (b.cost + b.heuristic))
         .map((f) => f.path),
-      addedNodes: addedNeighbors,
+      addedNodes: addedNodes,
       description:
-        addedNeighbors.length === 0
-          ? `No new nodes added to frontier.`
-          : `Adding to frontier:\n${frontier
-              .filter((f) => addedNeighbors.includes(f.node))
+        addedNodes.length > 0
+          ? `Adding to frontier:\n${frontier
+              .filter((f) => addedNodes.includes(f.node))
               .map(
                 (f) =>
                   `${f.path.join(" → ")} (g: ${f.cost}, h: ${
                     f.heuristic
                   } --> f: ${f.cost + f.heuristic})`
               )
-              .join(",\n")}`,
+              .join(",\n")}`
+          : "No new nodes added to frontier.",
     });
   }
 
