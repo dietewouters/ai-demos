@@ -541,7 +541,13 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
           </CardHeader>
           <CardContent>
             <div className="w-full h-96 border rounded-lg bg-gray-50 relative overflow-hidden">
-              <svg width="100%" height="100%" viewBox="0 0 500 320">
+              <svg
+                width="100%"
+                height="100%"
+                viewBox={
+                  selectedGraph === "ex31" ? "0 -25 550 420" : "0 0 500 320"
+                }
+              >
                 {/* Edges */}
                 {currentGraph.edges.map((edge, index) => {
                   const fromNode = currentGraph.nodes.find(
