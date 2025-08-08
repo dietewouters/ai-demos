@@ -11,7 +11,10 @@ const links = [
   {
     name: "Search",
     href: "/mainpage/search",
-    children: [{ name: "General", href: "/mainpage/search/general" }],
+    children: [
+      { name: "Session 1", href: "/mainpage/search/session1" },
+      { name: "Session 2", href: "/mainpage/search/session2" },
+    ],
   },
   {
     name: "Advanced Search and Games",

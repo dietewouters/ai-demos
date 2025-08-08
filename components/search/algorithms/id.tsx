@@ -1,4 +1,6 @@
-import type { SearchStep, Algorithm } from "../app/search";
+"use client";
+import type { SearchStep } from "../app/search";
+import type { Algorithm } from "../algorithms/types";
 
 function executeIterativeDeepening(
   adjList: { [key: string]: string[] },
@@ -272,6 +274,6 @@ function executeIterativeDeepening(
 export const IDD: Algorithm = {
   id: "id",
   name: "Iterative Deepening",
-  description: "Combines DFS completeness with BFS optimality",
+  description: "",
   execute: executeIterativeDeepening,
 };

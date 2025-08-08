@@ -1,4 +1,6 @@
-import type { SearchStep, Algorithm } from "../app/search";
+"use client";
+import type { SearchStep } from "../app/search";
+import type { Algorithm } from "../algorithms/types";
 import { graphs } from "../app/graphs";
 
 function executeBeamSearch(
@@ -140,7 +142,7 @@ function executeBeamSearch(
 export const Beam: Algorithm = {
   id: "beam",
   name: "Beam Search",
-  description: "Explores k best nodes based on heuristic at each step",
+  description: "",
   execute: (
     adjList,
     start,

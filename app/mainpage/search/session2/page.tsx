@@ -1,4 +1,5 @@
 import SearchDemo from "@/components/search/search-demo";
+import { algorithms2 } from "@/components/search/algorithms/algorithms2";
 
 export default function Home() {
   return (
@@ -8,7 +9,7 @@ export default function Home() {
         Here is a general demo about search algorithms.
       </h1>
       <br />
-      <SearchDemo />
+      <SearchDemo algorithms={algorithms2} />
     </main>
   );
 }

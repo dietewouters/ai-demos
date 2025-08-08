@@ -4,7 +4,7 @@ import { IDD } from "./id";
 import { Greedy } from "./greedy";
 import { Beam } from "./beam";
 import { UCS } from "./ucs";
-import type { Algorithm } from "../app/search";
+import type { Algorithm } from "../algorithms/types";
 
 export const algorithms: Algorithm[] = [BFS, DFS, IDD, Greedy, Beam, UCS];
 

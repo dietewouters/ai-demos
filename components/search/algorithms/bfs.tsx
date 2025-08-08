@@ -1,4 +1,6 @@
-import type { SearchStep, Algorithm } from "../app/search";
+"use client";
+import type { SearchStep } from "../app/search";
+import type { Algorithm } from "../algorithms/types";
 
 function executeBFS(
   adjList: { [key: string]: string[] },
@@ -167,6 +169,6 @@ function executeBFS(
 export const BFS: Algorithm = {
   id: "bfs",
   name: "Breadth-First Search",
-  description: "Explores layer by layer using a queue (FIFO)",
+  description: "",
   execute: executeBFS,
 };

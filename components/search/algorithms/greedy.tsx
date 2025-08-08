@@ -1,4 +1,6 @@
-import type { SearchStep, Algorithm } from "../app/search";
+"use client";
+import type { SearchStep } from "../app/search";
+import type { Algorithm } from "../algorithms/types";
 import { graphs } from "../app/graphs";
 
 function executeGreedySearch(
@@ -152,7 +154,7 @@ function executeGreedySearch(
 export const Greedy: Algorithm = {
   id: "greedy",
   name: "Greedy",
-  description: "Chooses nodes with lowest heuristic h(n)",
+  description: "",
   // let execute accept 5th param for graphId
   execute: (adjList, start, goal, earlyStop, loopBreaking, graphId = "tree") =>
     executeGreedySearch(adjList, start, goal, earlyStop, loopBreaking, graphId),

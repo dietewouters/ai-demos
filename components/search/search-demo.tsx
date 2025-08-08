@@ -17,9 +17,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RotateCcw, Settings, ChevronRight } from "lucide-react";
-import { algorithms, getAlgorithmById } from "./algorithms";
+import { getAlgorithmById } from "./algorithms";
 import { graphs, defaultNodes } from "./app/graphs";
 import type { SearchStep } from "./app/search";
+import type { Algorithm } from "./algorithms/types";
 
 type NodeState =
   | "unvisited"
@@ -64,7 +65,11 @@ const loopBreakingOptions = [
   },
 ];
 
-export default function SearchDemo() {
+interface SearchDemoProps {
+  algorithms: Algorithm[];
+}
+
+export default function SearchDemo({ algorithms }: SearchDemoProps) {
   const [selectedGraph, setSelectedGraph] = useState<string>("tree");
   const [algorithmId, setAlgorithmId] = useState<string>("bfs");
   const [stoppingCriterion, setStoppingCriterion] = useState<string>("late");
@@ -351,7 +356,7 @@ export default function SearchDemo() {
             {(algorithmId === "greedy" ||
               algorithmId === "dfs" ||
               algorithmId === "bfs" ||
-              algorithmId === "idd") && (
+              algorithmId === "id") && (
               <div className="grid grid-cols-1">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Stopping</label>
@@ -377,7 +382,7 @@ export default function SearchDemo() {
             {(algorithmId === "greedy" ||
               algorithmId === "dfs" ||
               algorithmId === "bfs" ||
-              algorithmId === "idd") && (
+              algorithmId === "id") && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">Loop Breaking</label>
                 <Select value={loopBreaking} onValueChange={setLoopBreaking}>
@@ -530,6 +535,14 @@ export default function SearchDemo() {
                     (n) => n.id === edge.to
                   )!;
                   const edgeType = shouldHighlightEdge(edge.from, edge.to);
+                  const edgeCost = currentGraph.costs?.find(
+                    (c) =>
+                      (c.from === edge.from && c.to === edge.to) ||
+                      (c.from === edge.to && c.to === edge.from)
+                  )?.cost;
+
+                  const midX = (fromNode.x + toNode.x) / 2;
+                  const midY = (fromNode.y + toNode.y) / 2;
 
                   return (
                     <g key={index}>
@@ -540,50 +553,28 @@ export default function SearchDemo() {
                         y2={toNode.y}
                         className={getEdgeStyle(edge.from, edge.to)}
                       />
-                      {edgeType === "explore" &&
-                        currentStep?.exploredEdge &&
-                        ((edge.from === currentStep.exploredEdge.from &&
-                          edge.to === currentStep.exploredEdge.to) ||
-                          (edge.from === currentStep.exploredEdge.to &&
-                            edge.to === currentStep.exploredEdge.from)) && (
-                          <g>
-                            <defs>
-                              <marker
-                                id={`arrow-${index}`}
-                                viewBox="0 0 10 10"
-                                refX="9"
-                                refY="3"
-                                markerWidth="6"
-                                markerHeight="6"
-                                orient="auto"
-                              >
-                                <path d="M0,0 L0,6 L9,3 z" fill="#f97316" />
-                              </marker>
-                            </defs>
-                            <line
-                              x1={
-                                edge.from === currentStep.exploredEdge.from
-                                  ? fromNode.x
-                                  : toNode.x
-                              }
-                              y1={
-                                edge.from === currentStep.exploredEdge.from
-                                  ? fromNode.y
-                                  : toNode.y
-                              }
-                              x2={
-                                edge.from === currentStep.exploredEdge.from
-                                  ? toNode.x
-                                  : fromNode.x
-                              }
-                              y2={
-                                edge.from === currentStep.exploredEdge.from
-                                  ? toNode.y
-                                  : fromNode.y
-                              }
-                            />
-                          </g>
-                        )}
+
+                      {/* UCS Edge Cost */}
+                      {algorithmId === "ucs" && (
+                        <text
+                          x={
+                            (fromNode.x + toNode.x) / 2 +
+                            (Math.abs(fromNode.y - toNode.y) < 10 ? 0 : 10)
+                          }
+                          y={
+                            (fromNode.y + toNode.y) / 2 +
+                            (Math.abs(fromNode.x - toNode.x) < 10 ? 0 : -10)
+                          }
+                          textAnchor="middle"
+                          className="text-xs fill-gray-700"
+                        >
+                          {graphs[selectedGraph].costs?.find(
+                            (c) =>
+                              (c.from === edge.from && c.to === edge.to) ||
+                              (c.to === edge.from && c.from === edge.to)
+                          )?.cost ?? ""}
+                        </text>
+                      )}
                     </g>
                   );
                 })}
@@ -609,7 +600,7 @@ export default function SearchDemo() {
                       >
                         {node.id}
                       </text>
-                      {(algorithmId === "greedy" || algorithmId === "ucs") &&
+                      {algorithmId === "greedy" &&
                         heuristicValue !== undefined && (
                           <text
                             x={node.x - 20}

@@ -1,13 +1,14 @@
-// Uniform Cost Search met ondersteuning voor costs[] zoals gedefinieerd in jouw graph
-import type { SearchStep, Algorithm } from "../app/search";
+"use client";
+import type { SearchStep } from "../app/search";
+import type { Algorithm } from "../algorithms/types";
 import { graphs } from "../app/graphs";
 
 function executeUCS(
   adjList: { [key: string]: string[] },
   startNode: string,
   goalNode: string,
-  _earlyStop: boolean, // genegeerd
-  _loopBreaking: boolean, // genegeerd
+  _earlyStop: boolean, // niet van toepassing voor UCS
+  _loopBreaking: boolean, // niet van toepassing voor UCS
   graphId: string = "tree"
 ): SearchStep[] {
   const steps: SearchStep[] = [];
@@ -16,7 +17,7 @@ function executeUCS(
   const paths: Record<string, string[]> = { [startNode]: [startNode] };
   const costSoFar: Record<string, number> = { [startNode]: 0 };
 
-  // frontier: priority queue gesorteerd op totale kost tot dusver
+  // frontier: priority queue gesorteerd op totale kost
   const frontier: { node: string; path: string[]; cost: number }[] = [
     { node: startNode, path: [startNode], cost: 0 },
   ];
@@ -24,7 +25,7 @@ function executeUCS(
   const costMap = new Map<string, number>();
   for (const { from, to, cost } of graphs[graphId].costs ?? []) {
     costMap.set(`${from}->${to}`, cost);
-    costMap.set(`${to}->${from}`, cost); // ongerichte grafen
+    costMap.set(`${to}->${from}`, cost);
   }
 
   function getCost(from: string, to: string): number {
@@ -83,6 +84,8 @@ function executeUCS(
     visited.add(currentNode);
 
     for (const neighbor of adjList[currentNode] || []) {
+      if (currentPath.includes(neighbor)) continue;
+
       const newCost = cost + getCost(currentNode, neighbor);
       if (!costSoFar[neighbor] || newCost < costSoFar[neighbor]) {
         costSoFar[neighbor] = newCost;
@@ -92,6 +95,9 @@ function executeUCS(
       }
     }
 
+    const addedNeighbors = (adjList[currentNode] || []).filter(
+      (n) => !visited.has(n)
+    );
     steps.push({
       stepType: "add_to_frontier",
       currentNode,
@@ -99,8 +105,11 @@ function executeUCS(
       frontier: frontier.map((f) => f.node),
       parent: { ...parent },
       pathQueue: frontier.map((f) => f.path),
-      addedNodes: (adjList[currentNode] || []).filter((n) => !visited.has(n)),
-      description: `Added neighbors of ${currentNode} to frontier`,
+      addedNodes: addedNeighbors,
+      description: `Adding to frontier:\n${frontier
+        .filter((f) => addedNeighbors.includes(f.node))
+        .map((f) => `${f.path.join(" → ")} (cost: ${f.cost})`)
+        .join(",\n")}`,
     });
   }
 
@@ -121,7 +130,7 @@ function executeUCS(
 export const UCS: Algorithm = {
   id: "ucs",
   name: "Uniform Cost Search",
-  description: "Expands lowest-cost node first (Dijkstra)",
+  description: "",
   execute: (adj, start, goal, _e, _l, graphId) =>
     executeUCS(adj, start, goal, false, false, graphId),
 };

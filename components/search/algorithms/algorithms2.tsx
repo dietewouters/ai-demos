@@ -7,8 +7,8 @@ import { Beam } from "../algorithms/beam";
 import { UCS } from "../algorithms/ucs";
 import type { Algorithm } from "./types";
 
-export const algorithms: Algorithm[] = [DFS, BFS, IDD, Greedy, Beam, UCS];
+export const algorithms2: Algorithm[] = [DFS, BFS, IDD, Greedy, Beam, UCS];
 
 export const getAlgorithmById = (id: string): Algorithm | undefined => {
-  return algorithms.find((algo) => algo.id === id);
+  return algorithms2.find((algo) => algo.id === id);
 };

@@ -1,4 +1,6 @@
-import type { SearchStep, Algorithm } from "../app/search";
+"use client";
+import type { SearchStep } from "../app/search";
+import type { Algorithm } from "../algorithms/types";
 
 function executeDFS(
   adjList: { [key: string]: string[] },
@@ -26,9 +28,7 @@ function executeDFS(
     frontier: [startNode],
     parent: {},
     pathQueue: [[startNode]],
-    description: `Starting ${
-      earlyStop ? "early" : "late"
-    } stopping DFS from node ${startNode}`,
+    description: ``,
   });
 
   while (frontier.length > 0 && stepCounter < MAX_STEPS) {
@@ -196,6 +196,6 @@ function executeDFS(
 export const DFS: Algorithm = {
   id: "dfs",
   name: "Depth-First Search",
-  description: "Goes deep first using a stack (LIFO)",
+  description: "",
   execute: executeDFS,
 };
