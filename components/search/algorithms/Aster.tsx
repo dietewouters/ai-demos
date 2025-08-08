@@ -25,11 +25,13 @@ function executeAStar(
   const getCost = (from: string, to: string) =>
     costs.get(`${from}->${to}`) ?? 1;
 
+  const gScore: Record<string, number> = { [startNode]: 0 };
+
   type FrontierItem = {
     node: string;
     path: string[];
-    cost: number; // g(n)
-    heuristic: number; // h(n)
+    cost: number;
+    heuristic: number;
   };
 
   const frontier: FrontierItem[] = [
@@ -52,7 +54,6 @@ function executeAStar(
   });
 
   while (frontier.length > 0) {
-    // Sorteer op f(n) = g(n) + h(n)
     frontier.sort((a, b) => a.cost + a.heuristic - (b.cost + b.heuristic));
 
     const {
@@ -102,7 +103,7 @@ function executeAStar(
 
     const neighbors = (adjList[currentNode] || []).filter((n) => {
       if (!loopBreaking) return true;
-      return !visited.has(n) && !currentPath.includes(n);
+      return !visited.has(n);
     });
 
     steps.push({
@@ -118,21 +119,24 @@ function executeAStar(
       )}`,
     });
 
-    for (const neighbor of neighbors) {
-      const newCost = gCost + getCost(currentNode, neighbor);
+    const addedNeighbors: string[] = [];
 
-      if (
-        !frontier.find((f) => f.node === neighbor) ||
-        newCost < (frontier.find((f) => f.node === neighbor)?.cost ?? Infinity)
-      ) {
+    for (const neighbor of neighbors) {
+      const tentativeG = gCost + getCost(currentNode, neighbor);
+
+      if (tentativeG < (gScore[neighbor] ?? Infinity)) {
+        gScore[neighbor] = tentativeG;
         parent[neighbor] = currentNode;
+
         const newPath = [...currentPath, neighbor];
         frontier.push({
           node: neighbor,
           path: newPath,
-          cost: newCost,
+          cost: tentativeG,
           heuristic: heuristic(neighbor),
         });
+
+        addedNeighbors.push(neighbor);
 
         if (earlyStop && neighbor === goalNode) {
           steps.push({
@@ -152,12 +156,12 @@ function executeAStar(
       }
     }
 
-    const addedNodes = neighbors;
     steps.push({
       stepType: "add_to_frontier",
       currentNode,
       visited: new Set(visited),
-      frontier: [...frontier]
+      frontier: frontier
+        .slice()
         .sort((a, b) => a.cost + a.heuristic - (b.cost + b.heuristic))
         .map((f) => f.node),
       parent: { ...parent },
@@ -165,16 +169,19 @@ function executeAStar(
         .slice()
         .sort((a, b) => a.cost + a.heuristic - (b.cost + b.heuristic))
         .map((f) => f.path),
-      addedNodes,
-      description: `Adding to frontier:\n${frontier
-        .filter((f) => addedNodes.includes(f.node))
-        .map(
-          (f) =>
-            `${f.path.join(" → ")} (g: ${f.cost}, h: ${f.heuristic} --> f: ${
-              f.cost + f.heuristic
-            })`
-        )
-        .join(",\n")}`,
+      addedNodes: addedNeighbors,
+      description:
+        addedNeighbors.length === 0
+          ? `No new nodes added to frontier.`
+          : `Adding to frontier:\n${frontier
+              .filter((f) => addedNeighbors.includes(f.node))
+              .map(
+                (f) =>
+                  `${f.path.join(" → ")} (g: ${f.cost}, h: ${
+                    f.heuristic
+                  } --> f: ${f.cost + f.heuristic})`
+              )
+              .join(",\n")}`,
     });
   }
 

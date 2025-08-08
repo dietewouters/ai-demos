@@ -14,13 +14,12 @@ function executeGreedySearch(
   const steps: SearchStep[] = [];
   const visited = new Set<string>();
   const parent: { [key: string]: string } = {};
+
   const heuristics = graphs[graphId]?.heuristics ?? {};
   const heuristic = (node: string) => heuristics[node] ?? Infinity;
 
-  type FrontierItem = { node: string; path: string[]; heuristic: number };
-
-  const frontier: FrontierItem[] = [
-    { node: startNode, path: [startNode], heuristic: heuristic(startNode) },
+  const frontier: { node: string; path: string[] }[] = [
+    { node: startNode, path: [startNode] },
   ];
 
   steps.push({
@@ -28,22 +27,20 @@ function executeGreedySearch(
     currentNode: startNode,
     visited: new Set(),
     frontier: [startNode],
-    parent: { ...parent },
+    parent: {},
     pathQueue: [[startNode]],
     description: `Start Greedy Search at ${startNode}`,
   });
 
   while (frontier.length > 0) {
-    // Sorteer op heuristiek
-    frontier.sort((a, b) => a.heuristic - b.heuristic);
+    frontier.sort((a, b) => heuristic(a.node) - heuristic(b.node));
 
     const { node: currentNode, path: currentPath } = frontier.shift()!;
-    const currentVisited = new Set(visited);
 
     steps.push({
       stepType: "take_from_frontier",
       currentNode,
-      visited: new Set(currentVisited),
+      visited: new Set(visited),
       frontier: frontier.map((f) => f.node),
       parent: { ...parent },
       pathQueue: frontier.map((f) => f.path),
@@ -55,16 +52,16 @@ function executeGreedySearch(
               to: currentNode,
             }
           : undefined,
-      description: `Taking path with lowest heuristic from frontier: ${currentPath.join(
+      description: `Taking node with lowest heuristic: ${currentPath.join(
         " → "
-      )}`,
+      )} (h: ${heuristic(currentNode)})`,
     });
 
     if (currentNode === goalNode) {
       steps.push({
         stepType: "goal_found",
         currentNode,
-        visited: new Set(currentVisited),
+        visited: new Set(visited),
         frontier: [],
         parent: { ...parent },
         finalPath: currentPath,
@@ -78,7 +75,7 @@ function executeGreedySearch(
 
     const neighbors = (adjList[currentNode] || []).filter((n) => {
       if (!loopBreaking) return true;
-      return !visited.has(n) && !currentPath.includes(n);
+      return !visited.has(n) && !frontier.find((f) => f.node === n);
     });
 
     steps.push({
@@ -94,30 +91,30 @@ function executeGreedySearch(
       )}`,
     });
 
+    const addedNeighbors: string[] = [];
+
     for (const neighbor of neighbors) {
-      if (!parent[neighbor]) parent[neighbor] = currentNode;
+      if (!frontier.find((f) => f.node === neighbor)) {
+        parent[neighbor] = currentNode;
+        const newPath = [...currentPath, neighbor];
+        frontier.push({ node: neighbor, path: newPath });
+        addedNeighbors.push(neighbor);
 
-      const newPath = [...currentPath, neighbor];
-      frontier.push({
-        node: neighbor,
-        path: newPath,
-        heuristic: heuristic(neighbor),
-      });
-
-      if (earlyStop && neighbor === goalNode) {
-        steps.push({
-          stepType: "goal_found",
-          currentNode: neighbor,
-          visited: new Set(visited),
-          frontier: [],
-          parent: { ...parent },
-          finalPath: newPath,
-          pathQueue: [],
-          description: `Goal ${goalNode} found in frontier! Path: ${newPath.join(
-            " → "
-          )}`,
-        });
-        return steps;
+        if (earlyStop && neighbor === goalNode) {
+          steps.push({
+            stepType: "goal_found",
+            currentNode: neighbor,
+            visited: new Set(visited),
+            frontier: [],
+            parent: { ...parent },
+            finalPath: newPath,
+            pathQueue: [],
+            description: `Goal ${goalNode} found early. Path: ${newPath.join(
+              " → "
+            )}`,
+          });
+          return steps;
+        }
       }
     }
 
@@ -125,23 +122,23 @@ function executeGreedySearch(
       stepType: "add_to_frontier",
       currentNode,
       visited: new Set(visited),
-      frontier: [...frontier]
-        .sort((a, b) => a.heuristic - b.heuristic)
+      frontier: frontier
+        .slice()
+        .sort((a, b) => heuristic(a.node) - heuristic(b.node))
         .map((f) => f.node),
       parent: { ...parent },
       pathQueue: frontier
         .slice()
-        .sort((a, b) => a.heuristic - b.heuristic)
+        .sort((a, b) => heuristic(a.node) - heuristic(b.node))
         .map((f) => f.path),
-      addedNodes: neighbors,
-      description: `Adding to frontier:\n${neighbors
-        .map((n) => {
-          const entry = frontier.find((f) => f.node === n);
-          return entry
-            ? `${entry.path.join(" → ")} (h: ${entry.heuristic})`
-            : n;
-        })
-        .join(",\n")}`,
+      addedNodes: addedNeighbors,
+      description:
+        addedNeighbors.length === 0
+          ? `No new nodes added to frontier.`
+          : `Adding to frontier:\n${frontier
+              .filter((f) => addedNeighbors.includes(f.node))
+              .map((f) => `${f.path.join(" → ")} (h: ${heuristic(f.node)})`)
+              .join(",\n")}`,
     });
   }
 
@@ -162,7 +159,7 @@ function executeGreedySearch(
 export const Greedy: Algorithm = {
   id: "greedy",
   name: "Greedy Search",
-  description: "Always chooses the node with lowest heuristic h(n)",
+  description: "Greedy Best-First Search using h(n)",
   execute: (adjList, start, goal, earlyStop, loopBreaking, graphId = "tree") =>
     executeGreedySearch(adjList, start, goal, earlyStop, loopBreaking, graphId),
 };
