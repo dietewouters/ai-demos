@@ -50,9 +50,14 @@ function executeUCS(
       stepType: "take_from_frontier",
       currentNode,
       visited: new Set(visited),
-      frontier: frontier.map((f) => f.node),
+      frontier: [...frontier]
+        .sort((a, b) => a.cost - b.cost)
+        .map((f) => f.node),
+
       parent: { ...parent },
-      pathQueue: frontier.map((f) => f.path),
+      pathQueue: [...frontier]
+        .sort((a, b) => a.cost - b.cost)
+        .map((f) => f.path),
       takenNode: currentNode,
       exploredEdge:
         currentPath.length > 1
@@ -102,9 +107,13 @@ function executeUCS(
       stepType: "add_to_frontier",
       currentNode,
       visited: new Set(visited),
-      frontier: frontier.map((f) => f.node),
+      frontier: [...frontier]
+        .sort((a, b) => a.cost - b.cost)
+        .map((f) => f.node),
       parent: { ...parent },
-      pathQueue: frontier.map((f) => f.path),
+      pathQueue: [...frontier]
+        .sort((a, b) => a.cost - b.cost)
+        .map((f) => f.path),
       addedNodes: addedNeighbors,
       description: `Adding to frontier:\n${frontier
         .filter((f) => addedNeighbors.includes(f.node))

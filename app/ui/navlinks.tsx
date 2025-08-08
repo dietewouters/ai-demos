@@ -12,13 +12,9 @@ const links = [
     name: "Search",
     href: "/mainpage/search",
     children: [
-      { name: "Session 1", href: "/mainpage/search/session1" },
-      { name: "Session 2", href: "/mainpage/search/session2" },
+      { name: "Search", href: "/mainpage/search/session1" },
+      { name: "Advanced Search & Games", href: "/mainpage/search/session2" },
     ],
-  },
-  {
-    name: "Advanced Search and Games",
-    href: "/mainpage/advancedsearchandgames",
   },
   { name: "CSP", href: "/mainpage/csp" },
   { name: "Propositional Logic", href: "/mainpage/propositionallogic" },

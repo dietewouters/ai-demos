@@ -555,7 +555,7 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                       />
 
                       {/* UCS Edge Cost */}
-                      {algorithmId === "ucs" && (
+                      {(algorithmId === "ucs" || algorithmId === "astar") && (
                         <text
                           x={
                             (fromNode.x + toNode.x) / 2 +
@@ -566,7 +566,7 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                             (Math.abs(fromNode.x - toNode.x) < 10 ? 0 : -10)
                           }
                           textAnchor="middle"
-                          className="text-xs fill-gray-700"
+                          className="text-xs fill-green-700"
                         >
                           {graphs[selectedGraph].costs?.find(
                             (c) =>
@@ -600,13 +600,13 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                       >
                         {node.id}
                       </text>
-                      {algorithmId === "greedy" &&
+                      {(algorithmId === "greedy" || algorithmId === "astar") &&
                         heuristicValue !== undefined && (
                           <text
                             x={node.x - 20}
                             y={node.y - 25}
                             textAnchor="middle"
-                            className="text-xs fill-gray-700"
+                            className="text-xs fill-blue-700"
                           >
                             h: {heuristicValue}
                           </text>

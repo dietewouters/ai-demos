@@ -3,7 +3,7 @@ import type { SearchStep } from "../app/search";
 import type { Algorithm } from "../algorithms/types";
 import { graphs } from "../app/graphs";
 
-function executeGreedySearch(
+function executeAStar(
   adjList: { [key: string]: string[] },
   startNode: string,
   goalNode: string,
@@ -13,14 +13,32 @@ function executeGreedySearch(
 ): SearchStep[] {
   const steps: SearchStep[] = [];
   const visited = new Set<string>();
-  const parent: { [key: string]: string } = {};
+  const parent: Record<string, string> = {};
   const heuristics = graphs[graphId]?.heuristics ?? {};
   const heuristic = (node: string) => heuristics[node] ?? Infinity;
 
-  type FrontierItem = { node: string; path: string[]; heuristic: number };
+  const costs = new Map<string, number>();
+  for (const { from, to, cost } of graphs[graphId]?.costs ?? []) {
+    costs.set(`${from}->${to}`, cost);
+    costs.set(`${to}->${from}`, cost);
+  }
+  const getCost = (from: string, to: string) =>
+    costs.get(`${from}->${to}`) ?? 1;
+
+  type FrontierItem = {
+    node: string;
+    path: string[];
+    cost: number; // g(n)
+    heuristic: number; // h(n)
+  };
 
   const frontier: FrontierItem[] = [
-    { node: startNode, path: [startNode], heuristic: heuristic(startNode) },
+    {
+      node: startNode,
+      path: [startNode],
+      cost: 0,
+      heuristic: heuristic(startNode),
+    },
   ];
 
   steps.push({
@@ -28,16 +46,20 @@ function executeGreedySearch(
     currentNode: startNode,
     visited: new Set(),
     frontier: [startNode],
-    parent: { ...parent },
+    parent: {},
     pathQueue: [[startNode]],
-    description: `Start Greedy Search at ${startNode}`,
+    description: `Start A* Search from ${startNode}`,
   });
 
   while (frontier.length > 0) {
-    // Sorteer op heuristiek
-    frontier.sort((a, b) => a.heuristic - b.heuristic);
+    // Sorteer op f(n) = g(n) + h(n)
+    frontier.sort((a, b) => a.cost + a.heuristic - (b.cost + b.heuristic));
 
-    const { node: currentNode, path: currentPath } = frontier.shift()!;
+    const {
+      node: currentNode,
+      path: currentPath,
+      cost: gCost,
+    } = frontier.shift()!;
     const currentVisited = new Set(visited);
 
     steps.push({
@@ -55,9 +77,9 @@ function executeGreedySearch(
               to: currentNode,
             }
           : undefined,
-      description: `Taking path with lowest heuristic from frontier: ${currentPath.join(
+      description: `Taking node with lowest f(n) = g + h: ${currentPath.join(
         " → "
-      )}`,
+      )} (cost: ${gCost}, h: ${heuristic(currentNode)} )`,
     });
 
     if (currentNode === goalNode) {
@@ -69,7 +91,9 @@ function executeGreedySearch(
         parent: { ...parent },
         finalPath: currentPath,
         pathQueue: [],
-        description: `Goal ${goalNode} found! Path: ${currentPath.join(" → ")}`,
+        description: `Goal ${goalNode} found! Path: ${currentPath.join(
+          " → "
+        )} (Total cost: ${gCost})`,
       });
       return steps;
     }
@@ -95,52 +119,61 @@ function executeGreedySearch(
     });
 
     for (const neighbor of neighbors) {
-      if (!parent[neighbor]) parent[neighbor] = currentNode;
+      const newCost = gCost + getCost(currentNode, neighbor);
 
-      const newPath = [...currentPath, neighbor];
-      frontier.push({
-        node: neighbor,
-        path: newPath,
-        heuristic: heuristic(neighbor),
-      });
-
-      if (earlyStop && neighbor === goalNode) {
-        steps.push({
-          stepType: "goal_found",
-          currentNode: neighbor,
-          visited: new Set(visited),
-          frontier: [],
-          parent: { ...parent },
-          finalPath: newPath,
-          pathQueue: [],
-          description: `Goal ${goalNode} found in frontier! Path: ${newPath.join(
-            " → "
-          )}`,
+      if (
+        !frontier.find((f) => f.node === neighbor) ||
+        newCost < (frontier.find((f) => f.node === neighbor)?.cost ?? Infinity)
+      ) {
+        parent[neighbor] = currentNode;
+        const newPath = [...currentPath, neighbor];
+        frontier.push({
+          node: neighbor,
+          path: newPath,
+          cost: newCost,
+          heuristic: heuristic(neighbor),
         });
-        return steps;
+
+        if (earlyStop && neighbor === goalNode) {
+          steps.push({
+            stepType: "goal_found",
+            currentNode: neighbor,
+            visited: new Set(visited),
+            frontier: [],
+            parent: { ...parent },
+            finalPath: newPath,
+            pathQueue: [],
+            description: `Goal ${goalNode} found early. Path: ${newPath.join(
+              " → "
+            )}`,
+          });
+          return steps;
+        }
       }
     }
 
+    const addedNodes = neighbors;
     steps.push({
       stepType: "add_to_frontier",
       currentNode,
       visited: new Set(visited),
       frontier: [...frontier]
-        .sort((a, b) => a.heuristic - b.heuristic)
+        .sort((a, b) => a.cost + a.heuristic - (b.cost + b.heuristic))
         .map((f) => f.node),
       parent: { ...parent },
       pathQueue: frontier
         .slice()
-        .sort((a, b) => a.heuristic - b.heuristic)
+        .sort((a, b) => a.cost + a.heuristic - (b.cost + b.heuristic))
         .map((f) => f.path),
-      addedNodes: neighbors,
-      description: `Adding to frontier:\n${neighbors
-        .map((n) => {
-          const entry = frontier.find((f) => f.node === n);
-          return entry
-            ? `${entry.path.join(" → ")} (h: ${entry.heuristic})`
-            : n;
-        })
+      addedNodes,
+      description: `Adding to frontier:\n${frontier
+        .filter((f) => addedNodes.includes(f.node))
+        .map(
+          (f) =>
+            `${f.path.join(" → ")} (g: ${f.cost}, h: ${f.heuristic} --> f: ${
+              f.cost + f.heuristic
+            })`
+        )
         .join(",\n")}`,
     });
   }
@@ -159,10 +192,10 @@ function executeGreedySearch(
   return steps;
 }
 
-export const Greedy: Algorithm = {
-  id: "greedy",
-  name: "Greedy Search",
-  description: "Always chooses the node with lowest heuristic h(n)",
+export const AStar: Algorithm = {
+  id: "astar",
+  name: "A* Search",
+  description: "Search that uses f(n) = g(n) + h(n)",
   execute: (adjList, start, goal, earlyStop, loopBreaking, graphId = "tree") =>
-    executeGreedySearch(adjList, start, goal, earlyStop, loopBreaking, graphId),
+    executeAStar(adjList, start, goal, earlyStop, loopBreaking, graphId),
 };
