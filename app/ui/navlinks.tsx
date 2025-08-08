@@ -16,7 +16,12 @@ const links = [
       { name: "Advanced Search & Games", href: "/mainpage/search/session2" },
     ],
   },
-  { name: "CSP", href: "/mainpage/csp" },
+  {
+    name: "CSP",
+    href: "/mainpage/csp",
+    children: [{ name: "General", href: "/mainpage/csp/general" }],
+  },
+
   { name: "Propositional Logic", href: "/mainpage/propositionallogic" },
   { name: "First Order Logic", href: "/mainpage/firstorderlogic" },
   { name: "Probability", href: "/mainpage/probability" },
