@@ -2,6 +2,11 @@
 import type { SearchStep } from "../app/search";
 import type { Algorithm } from "../algorithms/types";
 
+const parseCoords = (id: string): [number, number] => {
+  const [xStr, yStr] = id.split("_");
+  return [parseInt(xStr, 10), parseInt(yStr, 10)];
+};
+
 function executeDFS(
   adjList: { [key: string]: string[] },
   startNode: string,
@@ -20,7 +25,6 @@ function executeDFS(
   let stepCounter = 0;
   const MAX_STEPS = 5000;
 
-  // Initial step
   steps.push({
     stepType: "start",
     currentNode: startNode,
@@ -33,17 +37,10 @@ function executeDFS(
 
   while (frontier.length > 0 && stepCounter < MAX_STEPS) {
     stepCounter++;
-
     const currentNode = frontier.pop()!;
-
-    // Alleen overslaan als loop breaking aan staat
     if (loopBreaking && visited.has(currentNode)) continue;
 
-    // Beveiliging: zorg dat path bestaat
-    if (!paths[currentNode]) {
-      paths[currentNode] = [currentNode];
-    }
-
+    if (!paths[currentNode]) paths[currentNode] = [currentNode];
     visited.add(currentNode);
 
     const exploredEdge =
@@ -65,7 +62,6 @@ function executeDFS(
       )}`,
     });
 
-    // Late stopping
     if (currentNode === goalNode) {
       steps.push({
         stepType: "goal_found",
@@ -82,7 +78,24 @@ function executeDFS(
       break;
     }
 
-    const neighbors = (adjList[currentNode] || []).sort();
+    // --- NEW: sort neighbors by up, right, left, down ---
+    const [cx, cy] = parseCoords(currentNode);
+    const directionOrder = (a: string, b: string) => {
+      const [ax, ay] = parseCoords(a);
+      const [bx, by] = parseCoords(b);
+
+      const dirScore = (x: number, y: number) => {
+        if (y < cy && x === cx) return 0; // up
+        if (x > cx && y === cy) return 1; // right
+        if (x < cx && y === cy) return 2; // left
+        if (y > cy && x === cx) return 3; // down
+        return 4; // others (diagonal etc.)
+      };
+
+      return dirScore(ax, ay) - dirScore(bx, by);
+    };
+
+    const neighbors = (adjList[currentNode] || []).sort(directionOrder);
     const highlightedEdges = neighbors.map((neighbor) => ({
       from: currentNode,
       to: neighbor,
@@ -111,13 +124,7 @@ function executeDFS(
       const reversedNeighbors = [...validNeighbors].reverse();
       for (const neighbor of reversedNeighbors) {
         frontier.push(neighbor);
-
-        // Beveiliging: zorg dat path naar current bestaat
-        if (!paths[currentNode]) {
-          paths[currentNode] = [currentNode];
-        }
-
-        // Altijd parent en path bijwerken (ook bij revisits)
+        if (!paths[currentNode]) paths[currentNode] = [currentNode];
         parent[neighbor] = currentNode;
         paths[neighbor] = [...paths[currentNode], neighbor];
 

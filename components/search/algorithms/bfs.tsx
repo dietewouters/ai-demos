@@ -2,6 +2,35 @@
 import type { SearchStep } from "../app/search";
 import type { Algorithm } from "../algorithms/types";
 
+const parseCoords = (id: string): [number, number] | null => {
+  const parts = id.split("_");
+  if (parts.length !== 2) return null;
+  const x = parseInt(parts[0], 10);
+  const y = parseInt(parts[1], 10);
+  if (isNaN(x) || isNaN(y)) return null;
+  return [x, y];
+};
+
+const sortByDirection = (current: string, neighbors: string[]) => {
+  const coords = parseCoords(current);
+  if (!coords) return neighbors.sort(); // fallback for non-grid IDs
+
+  const [cx, cy] = coords;
+
+  const dirScore = (id: string) => {
+    const c = parseCoords(id);
+    if (!c) return 99; // put non-grid last
+    const [x, y] = c;
+    if (y < cy && x === cx) return 0; // up
+    if (x > cx && y === cy) return 1; // right
+    if (x < cx && y === cy) return 2; // left
+    if (y > cy && x === cx) return 3; // down
+    return 4; // others
+  };
+
+  return [...neighbors].sort((a, b) => dirScore(a) - dirScore(b));
+};
+
 function executeBFS(
   adjList: { [key: string]: string[] },
   startNode: string,
@@ -15,10 +44,11 @@ function executeBFS(
   const parent: { [key: string]: string } = {};
   const paths: { [key: string]: string[] } = { [startNode]: [startNode] };
 
-  // Build initial path queue
-  const getPathQueue = () => frontier.map((node) => paths[node] || [node]);
+  const getPathQueue = () => frontier.map((node) => paths[node] ?? [node]);
 
-  // Initial step
+  let stepCounter = 0;
+  const MAX_STEPS = 5000;
+
   steps.push({
     stepType: "start",
     currentNode: startNode,
@@ -29,14 +59,19 @@ function executeBFS(
     description: ``,
   });
 
-  while (frontier.length > 0) {
-    const currentNode = frontier.shift()!; // Queue (FIFO)
-
-    // Skip if already visited (prevents infinite loops) - only when loop breaking is on
+  while (frontier.length > 0 && stepCounter < MAX_STEPS) {
+    stepCounter++;
+    const currentNode = frontier.shift()!;
     if (loopBreaking && visited.has(currentNode)) continue;
 
-    // Step: Take node from frontier
+    if (!paths[currentNode]) paths[currentNode] = [currentNode];
     visited.add(currentNode);
+
+    const exploredEdge =
+      parent[currentNode] !== undefined
+        ? { from: parent[currentNode], to: currentNode }
+        : undefined;
+
     steps.push({
       stepType: "take_from_frontier",
       currentNode,
@@ -45,15 +80,12 @@ function executeBFS(
       parent: { ...parent },
       pathQueue: getPathQueue(),
       takenNode: currentNode,
-      exploredEdge: parent[currentNode]
-        ? { from: parent[currentNode], to: currentNode }
-        : undefined,
+      exploredEdge,
       description: `Taking path from frontier: ${paths[currentNode].join(
         " → "
       )}`,
     });
 
-    // Check if goal is reached (late stopping)
     if (currentNode === goalNode) {
       steps.push({
         stepType: "goal_found",
@@ -70,8 +102,7 @@ function executeBFS(
       break;
     }
 
-    // Step: Highlight all edges from current node
-    const neighbors = (adjList[currentNode] || []).sort();
+    const neighbors = sortByDirection(currentNode, adjList[currentNode] || []);
     const highlightedEdges = neighbors.map((neighbor) => ({
       from: currentNode,
       to: neighbor,
@@ -90,23 +121,19 @@ function executeBFS(
       )}`,
     });
 
-    // Step: Add valid neighbors to frontier
     const validNeighbors = loopBreaking
       ? neighbors.filter(
           (neighbor) => !visited.has(neighbor) && !frontier.includes(neighbor)
         )
-      : neighbors; // voeg alles toe als loopBreaking uit staat
+      : neighbors;
 
     if (validNeighbors.length > 0) {
       for (const neighbor of validNeighbors) {
         frontier.push(neighbor);
-        // altijd parent en path bijwerken als loopBreaking uit staat
-        if (!loopBreaking || !parent[neighbor]) {
-          parent[neighbor] = currentNode;
-          paths[neighbor] = [...paths[currentNode], neighbor];
-        }
+        if (!paths[currentNode]) paths[currentNode] = [currentNode];
+        parent[neighbor] = currentNode;
+        paths[neighbor] = [...paths[currentNode], neighbor];
 
-        // Early stopping: check if we just added the goal to frontier
         if (earlyStop && neighbor === goalNode) {
           steps.push({
             stepType: "add_to_frontier",
@@ -131,6 +158,7 @@ function executeBFS(
               neighbor
             ].join(" → ")}`,
           });
+
           return steps;
         }
       }
@@ -157,10 +185,22 @@ function executeBFS(
         pathQueue: getPathQueue(),
         addedNodes: [],
         description: `No new nodes to add to frontier (all neighbors already ${
-          loopBreaking ? "visited or in frontier" : "visited"
+          loopBreaking ? "visited or in frontier" : "processed"
         })`,
       });
     }
+  }
+
+  if (stepCounter >= MAX_STEPS) {
+    steps.push({
+      stepType: "error",
+      currentNode: "",
+      visited: new Set(visited),
+      frontier: [...frontier],
+      parent: { ...parent },
+      pathQueue: [],
+      description: `Search stopped after ${MAX_STEPS} steps to prevent infinite loop.`,
+    });
   }
 
   return steps;

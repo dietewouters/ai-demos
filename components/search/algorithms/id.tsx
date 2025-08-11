@@ -2,6 +2,36 @@
 import type { SearchStep } from "../app/search";
 import type { Algorithm } from "../algorithms/types";
 
+// Helpers to support directional ordering on grid ids: "x_y"
+const parseCoords = (id: string): [number, number] | null => {
+  const parts = id.split("_");
+  if (parts.length !== 2) return null;
+  const x = parseInt(parts[0], 10);
+  const y = parseInt(parts[1], 10);
+  if (Number.isNaN(x) || Number.isNaN(y)) return null;
+  return [x, y];
+};
+
+const sortByDirection = (current: string, neighbors: string[]) => {
+  const cur = parseCoords(current);
+  if (!cur) return [...neighbors].sort(); // fallback for non-grid ids
+  const [cx, cy] = cur;
+
+  const dirScore = (id: string) => {
+    const c = parseCoords(id);
+    if (!c) return 99; // non-grid → last
+    const [x, y] = c;
+    // Up, Right, Left, Down (only 4-neighborhood on same row/col)
+    if (y < cy && x === cx) return 0; // up
+    if (x > cx && y === cy) return 1; // right
+    if (x < cx && y === cy) return 2; // left
+    if (y > cy && x === cx) return 3; // down
+    return 4; // anything else (e.g. diagonals) after the four main dirs
+  };
+
+  return [...neighbors].sort((a, b) => dirScore(a) - dirScore(b));
+};
+
 function executeIterativeDeepening(
   adjList: { [key: string]: string[] },
   startNode: string,
@@ -33,7 +63,7 @@ function executeIterativeDeepening(
     while (activePaths.length > 0 && stepCounter < MAX_STEPS) {
       stepCounter++;
 
-      // Take the last path (stack behavior)
+      // Stack behavior (DFS within the depth limit)
       const currentPath = activePaths.pop()!;
       const currentNode = currentPath[currentPath.length - 1];
       const currentDepth = currentPath.length - 1;
@@ -43,17 +73,16 @@ function executeIterativeDeepening(
         ? new Set<string>(currentPath)
         : new Set<string>();
 
-      // Get all frontier nodes (last node of each remaining path)
+      // Remaining frontier nodes = last node of each remaining path
       const frontierNodes = activePaths.map((path) => path[path.length - 1]);
 
-      // Take path from stack - removed path is no longer in queue
       steps.push({
         stepType: "take_from_frontier",
         currentNode,
         visited,
-        frontier: frontierNodes, // Only remaining frontier nodes
+        frontier: frontierNodes,
         parent: {},
-        pathQueue: [...activePaths], // Only remaining paths
+        pathQueue: [...activePaths],
         takenNode: currentNode,
         exploredEdge:
           currentPath.length > 1
@@ -81,7 +110,7 @@ function executeIterativeDeepening(
         return "found";
       }
 
-      // Depth limit reached
+      // Depth cutoff
       if (currentDepth >= currentDepthLimit) {
         steps.push({
           stepType: "add_to_frontier",
@@ -97,8 +126,11 @@ function executeIterativeDeepening(
         continue;
       }
 
-      // Explore neighbors
-      const neighbors = (adjList[currentNode] || []).sort();
+      // --- Directional neighbor order (Up → Right → Left → Down) with fallback ---
+      const neighborsOrdered = sortByDirection(
+        currentNode,
+        adjList[currentNode] || []
+      );
 
       steps.push({
         stepType: "highlight_edges",
@@ -107,32 +139,22 @@ function executeIterativeDeepening(
         frontier: frontierNodes,
         parent: {},
         pathQueue: [...activePaths],
-        highlightedEdges: neighbors.map((neighbor) => ({
+        highlightedEdges: neighborsOrdered.map((neighbor) => ({
           from: currentNode,
           to: neighbor,
         })),
-        description: `Exploring neighbors of ${currentNode}: ${neighbors.join(
+        description: `Exploring neighbors of ${currentNode}: ${neighborsOrdered.join(
           ", "
         )} at depth ${currentDepth}`,
       });
 
       // Filter valid neighbors
-      let validNeighbors = neighbors;
-      if (loopBreaking) {
-        validNeighbors = neighbors.filter(
-          (neighbor) => !currentPath.includes(neighbor)
-        );
-        // } else {
-        //   // Even without loop breaking, avoid immediate cycles in current path
-        //   validNeighbors = neighbors.filter(
-        //     (neighbor) =>
-        //       currentPath.length === 1 ||
-        //       neighbor !== currentPath[currentPath.length - 2]
-        //   );
-      }
+      const validNeighbors = loopBreaking
+        ? neighborsOrdered.filter((neighbor) => !currentPath.includes(neighbor))
+        : neighborsOrdered;
 
       if (validNeighbors.length > 0) {
-        // Early stopping check
+        // Early stopping if goal is among next neighbors
         if (earlyStop && validNeighbors.includes(goalNode)) {
           const goalPath = [...currentPath, goalNode];
 
@@ -162,13 +184,12 @@ function executeIterativeDeepening(
           return "found";
         }
 
-        // Add new paths to explore (in reverse order for DFS-like behavior)
-        const newPaths = validNeighbors
+        // Push in reverse so pop() follows Up → Right → Left → Down
+        const newPaths = [...validNeighbors]
           .reverse()
           .map((neighbor) => [...currentPath, neighbor]);
         activePaths.push(...newPaths);
 
-        // Update frontier nodes after adding new paths
         const updatedFrontierNodes = activePaths.map(
           (path) => path[path.length - 1]
         );

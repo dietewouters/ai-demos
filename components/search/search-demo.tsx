@@ -113,14 +113,21 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
     if (!currentAlgorithm) return [];
 
     const adjList = buildAdjacencyList();
+
     const earlyStop = stoppingCriterion === "early";
-    const useLoopBreaking = loopBreaking === "on";
+
+    // otherwise precomputing all steps will freeze the UI.
+    const forceLoopBreaking =
+      selectedGraph === "ex31" // add other heavy graphs here if you want
+        ? true
+        : loopBreaking === "on";
+
     return currentAlgorithm.execute(
       adjList,
       startNode,
       goalNode,
       earlyStop,
-      useLoopBreaking,
+      forceLoopBreaking, // <- use the safe value
       selectedGraph,
       { beamWidth }
     );
@@ -131,6 +138,7 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
     buildAdjacencyList,
     stoppingCriterion,
     loopBreaking,
+    selectedGraph,
     beamWidth,
   ]);
 
