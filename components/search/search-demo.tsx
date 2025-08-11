@@ -305,6 +305,58 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
         return "stroke-gray-400 stroke-2";
     }
   };
+  // --- Queue score helpers ---
+  const getEdgeCost = (a: string, b: string): number => {
+    const c = graphs[selectedGraph].costs?.find(
+      (x) => (x.from === a && x.to === b) || (x.from === b && x.to === a)
+    )?.cost;
+    return c ?? 1; // default 1 als er geen costs-array is
+  };
+
+  const gCostOfPath = (path: string[]): number => {
+    if (path.length < 2) return 0;
+    let g = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+      g += getEdgeCost(path[i], path[i + 1]);
+    }
+    return g;
+  };
+
+  const hOfNode = (nodeId: string): number | undefined =>
+    graphs[selectedGraph].heuristics?.[nodeId];
+
+  const fOfPath = (path: string[]): number | undefined => {
+    const h = hOfNode(path[path.length - 1]);
+    if (h === undefined) return undefined;
+    return gCostOfPath(path) + h;
+  };
+
+  const fmt = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(2));
+
+  const formatQueueTag = (path: string[]): string | null => {
+    if (!path?.length) return null;
+
+    if (algorithmId === "greedy" || algorithmId === "beam") {
+      const h = hOfNode(path[path.length - 1]);
+      return h !== undefined ? `h=${fmt(h)}` : null;
+    }
+
+    if (algorithmId === "ucs") {
+      const g = gCostOfPath(path);
+      return `g=${fmt(g)}`;
+    }
+
+    if (algorithmId === "astar" || algorithmId === "idastar") {
+      const f = fOfPath(path);
+      if (f !== undefined) return `f=${fmt(f)}`;
+      // fallback als er geen heuristiek is
+      const g = gCostOfPath(path);
+      return `g=${fmt(g)}`;
+    }
+
+    // voor BFS/DFS/ID niets tonen
+    return null;
+  };
 
   const canTakeNextStep =
     searchState.currentStepIndex < searchState.steps.length - 1;
@@ -499,14 +551,22 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                   </div>
                   <div className="text-xs text-gray-600 space-y-1 max-h-20 overflow-y-auto">
                     {currentStep.pathQueue.length > 0 ? (
-                      currentStep.pathQueue.map((path, index) => (
-                        <div
-                          key={index}
-                          className="bg-white px-2 py-1 rounded border"
-                        >
-                          {path.join(" → ")}
-                        </div>
-                      ))
+                      currentStep.pathQueue.map((path, index) => {
+                        const tag = formatQueueTag(path);
+                        return (
+                          <div
+                            key={index}
+                            className="bg-white px-2 py-1 rounded border"
+                          >
+                            {path.join(" → ")}
+                            {tag && (
+                              <span className="ml-1 text-[11px] text-gray-500">
+                                ({tag})
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })
                     ) : (
                       <div className="text-gray-400 italic">Empty</div>
                     )}
