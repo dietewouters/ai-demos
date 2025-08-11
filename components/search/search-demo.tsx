@@ -37,7 +37,6 @@ interface SearchState {
   isComplete: boolean;
 }
 
-// Stopping criteria options
 const stoppingOptions = [
   {
     value: "late",
@@ -51,7 +50,6 @@ const stoppingOptions = [
   },
 ];
 
-// Loop breaking options
 const loopBreakingOptions = [
   {
     value: "on",
@@ -86,7 +84,6 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
   const currentGraph = graphs[selectedGraph];
   const currentAlgorithm = getAlgorithmById(algorithmId);
 
-  // Update start/goal nodes when graph changes
   useEffect(() => {
     const defaults = defaultNodes[selectedGraph];
     if (defaults) {
@@ -95,7 +92,6 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
     }
   }, [selectedGraph]);
 
-  // Build adjacency list
   const buildAdjacencyList = useCallback(() => {
     const adjList: { [key: string]: string[] } = {};
     currentGraph.nodes.forEach((node) => {
@@ -103,31 +99,23 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
     });
     currentGraph.edges.forEach((edge) => {
       adjList[edge.from].push(edge.to);
-      adjList[edge.to].push(edge.from); // Undirected graph
+      adjList[edge.to].push(edge.from);
     });
     return adjList;
   }, [currentGraph]);
 
-  // Generate all search steps using the selected algorithm
   const generateSearchSteps = useCallback(() => {
     if (!currentAlgorithm) return [];
-
     const adjList = buildAdjacencyList();
-
     const earlyStop = stoppingCriterion === "early";
-
-    // otherwise precomputing all steps will freeze the UI.
     const forceLoopBreaking =
-      selectedGraph === "ex31" // add other heavy graphs here if you want
-        ? true
-        : loopBreaking === "on";
-
+      selectedGraph === "ex31" ? true : loopBreaking === "on";
     return currentAlgorithm.execute(
       adjList,
       startNode,
       goalNode,
       earlyStop,
-      forceLoopBreaking, // <- use the safe value
+      forceLoopBreaking,
       selectedGraph,
       { beamWidth }
     );
@@ -142,37 +130,24 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
     beamWidth,
   ]);
 
-  // Reset search state
   const resetSearch = useCallback(() => {
     const steps = generateSearchSteps();
-    setSearchState({
-      steps,
-      currentStepIndex: -1,
-      isComplete: false,
-    });
+    setSearchState({ steps, currentStepIndex: -1, isComplete: false });
   }, [generateSearchSteps]);
 
-  // Next step
   const nextStep = useCallback(() => {
     setSearchState((prev) => {
       const nextIndex = prev.currentStepIndex + 1;
-
-      if (nextIndex >= prev.steps.length) {
-        return prev;
-      }
-
-      const nextStep = prev.steps[nextIndex];
-      const isComplete = nextStep && nextStep.stepType === "goal_found";
-
+      if (nextIndex >= prev.steps.length) return prev;
+      const step = prev.steps[nextIndex];
       return {
         ...prev,
         currentStepIndex: nextIndex,
-        isComplete,
+        isComplete: step?.stepType === "goal_found",
       };
     });
   }, []);
 
-  // Reset when parameters change
   useEffect(() => {
     resetSearch();
   }, [
@@ -186,18 +161,15 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
     beamWidth,
   ]);
 
-  // Get current step data
   const getCurrentStep = (): SearchStep | null => {
     if (
       searchState.currentStepIndex < 0 ||
       searchState.currentStepIndex >= searchState.steps.length
-    ) {
+    )
       return null;
-    }
     return searchState.steps[searchState.currentStepIndex];
   };
 
-  // Get node state for styling
   const getNodeState = (nodeId: string): NodeState => {
     const currentStep = getCurrentStep();
     if (!currentStep) {
@@ -208,53 +180,44 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
     if (
       currentStep.currentNode === nodeId &&
       currentStep.stepType !== "goal_found"
-    ) {
+    )
       return "current";
-    }
-
     if (nodeId === startNode) return "start";
     if (nodeId === goalNode) return "goal";
     if (currentStep.finalPath && currentStep.finalPath.includes(nodeId))
       return "path";
-
     if (currentStep.visited.has(nodeId)) return "visited";
     if (currentStep.frontier.includes(nodeId)) return "frontier";
     return "unvisited";
   };
 
-  // Node styling
   const getNodeStyle = (state: NodeState) => {
-    const baseStyle = "transition-all duration-500 ease-in-out";
+    const base = "transition-all duration-500 ease-in-out";
     switch (state) {
       case "current":
-        return `${baseStyle} fill-orange-400 stroke-orange-600 stroke-3`;
+        return `${base} fill-orange-400 stroke-orange-600 stroke-3`;
       case "start":
-        return `${baseStyle} fill-red-500 stroke-red-700 stroke-3`;
+        return `${base} fill-red-500 stroke-red-700 stroke-3`;
       case "goal":
-        return `${baseStyle} fill-green-500 stroke-green-700 stroke-3`;
+        return `${base} fill-green-500 stroke-green-700 stroke-3`;
       case "frontier":
-        return `${baseStyle} fill-yellow-300 stroke-yellow-500 stroke-2`;
+        return `${base} fill-yellow-300 stroke-yellow-500 stroke-2`;
       case "visited":
-        return `${baseStyle} fill-blue-400 stroke-blue-600 stroke-2`;
+        return `${base} fill-blue-400 stroke-blue-600 stroke-2`;
       case "path":
-        return `${baseStyle} fill-purple-500 stroke-purple-700 stroke-3`;
+        return `${base} fill-purple-500 stroke-purple-700 stroke-3`;
       case "unvisited":
-        return `${baseStyle} fill-gray-200 stroke-gray-400 stroke-1`;
+        return `${base} fill-gray-200 stroke-gray-400 stroke-1`;
     }
   };
 
-  // Check if edge should be highlighted
   const shouldHighlightEdge = (
     from: string,
     to: string
   ): "highlight" | "path" | "explore" | "none" => {
     const currentStep = getCurrentStep();
     if (!currentStep) return "none";
-
-    // Path edges take priority
     if (currentStep.finalPath && shouldShowPathEdge(from, to)) return "path";
-
-    // Exploration arrow
     if (
       currentStep.exploredEdge &&
       ((currentStep.exploredEdge.from === from &&
@@ -263,40 +226,33 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
           currentStep.exploredEdge.to === from))
     )
       return "explore";
-
-    // Highlighted edges
     if (currentStep.highlightedEdges) {
-      const isHighlighted = currentStep.highlightedEdges.some(
-        (edge) =>
-          (edge.from === from && edge.to === to) ||
-          (edge.from === to && edge.to === from)
+      const hl = currentStep.highlightedEdges.some(
+        (e) =>
+          (e.from === from && e.to === to) || (e.from === to && e.to === from)
       );
-      if (isHighlighted) return "highlight";
+      if (hl) return "highlight";
     }
-
     return "none";
   };
 
   const shouldShowPathEdge = (from: string, to: string): boolean => {
     const currentStep = getCurrentStep();
     if (!currentStep || !currentStep.finalPath) return false;
-
-    const path = currentStep.finalPath;
-    for (let i = 0; i < path.length - 1; i++) {
+    const p = currentStep.finalPath;
+    for (let i = 0; i < p.length - 1; i++) {
       if (
-        (path[i] === from && path[i + 1] === to) ||
-        (path[i] === to && path[i + 1] === from)
-      ) {
+        (p[i] === from && p[i + 1] === to) ||
+        (p[i] === to && p[i + 1] === from)
+      )
         return true;
-      }
     }
     return false;
   };
 
-  // Get edge style
   const getEdgeStyle = (from: string, to: string) => {
-    const edgeType = shouldHighlightEdge(from, to);
-    switch (edgeType) {
+    const t = shouldHighlightEdge(from, to);
+    switch (t) {
       case "path":
         return "stroke-purple-500 stroke-4";
       case "highlight":
@@ -305,20 +261,26 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
         return "stroke-gray-400 stroke-2";
     }
   };
-  // --- Queue score helpers ---
+
+  const canTakeNextStep =
+    searchState.currentStepIndex < searchState.steps.length - 1;
+  const selectedLoopBreakingOption = loopBreakingOptions.find(
+    (o) => o.value === loopBreaking
+  );
+  const currentStep = getCurrentStep();
+
   const getEdgeCost = (a: string, b: string): number => {
     const c = graphs[selectedGraph].costs?.find(
       (x) => (x.from === a && x.to === b) || (x.from === b && x.to === a)
     )?.cost;
-    return c ?? 1; // default 1 als er geen costs-array is
+    return c ?? 1;
   };
 
   const gCostOfPath = (path: string[]): number => {
     if (path.length < 2) return 0;
     let g = 0;
-    for (let i = 0; i < path.length - 1; i++) {
+    for (let i = 0; i < path.length - 1; i++)
       g += getEdgeCost(path[i], path[i + 1]);
-    }
     return g;
   };
 
@@ -335,38 +297,17 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
 
   const formatQueueTag = (path: string[]): string | null => {
     if (!path?.length) return null;
-
     if (algorithmId === "greedy" || algorithmId === "beam") {
       const h = hOfNode(path[path.length - 1]);
       return h !== undefined ? `h=${fmt(h)}` : null;
     }
-
-    if (algorithmId === "ucs") {
-      const g = gCostOfPath(path);
-      return `g=${fmt(g)}`;
-    }
-
+    if (algorithmId === "ucs") return `g=${fmt(gCostOfPath(path))}`;
     if (algorithmId === "astar" || algorithmId === "idastar") {
       const f = fOfPath(path);
-      if (f !== undefined) return `f=${fmt(f)}`;
-      // fallback als er geen heuristiek is
-      const g = gCostOfPath(path);
-      return `g=${fmt(g)}`;
+      return f !== undefined ? `f=${fmt(f)}` : `g=${fmt(gCostOfPath(path))}`;
     }
-
-    // voor BFS/DFS/ID niets tonen
-    return null;
+    return null; // BFS/DFS/ID
   };
-
-  const canTakeNextStep =
-    searchState.currentStepIndex < searchState.steps.length - 1;
-  const selectedStoppingOption = stoppingOptions.find(
-    (option) => option.value === stoppingCriterion
-  );
-  const selectedLoopBreakingOption = loopBreakingOptions.find(
-    (option) => option.value === loopBreaking
-  );
-  const currentStep = getCurrentStep();
 
   return (
     <div className="w-full max-w-6xl mx-auto p-6 space-y-6">
@@ -379,217 +320,229 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
               Controls
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Graph Type</label>
-              <Select value={selectedGraph} onValueChange={setSelectedGraph}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(graphs).map(([key, graph]) => (
-                    <SelectItem key={key} value={key}>
-                      {graph.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
-            <div className="grid grid-cols-1">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Algorithm</label>
-                <Select value={algorithmId} onValueChange={setAlgorithmId}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {algorithms.map((algorithm) => (
-                      <SelectItem key={algorithm.id} value={algorithm.id}>
-                        {algorithm.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {(algorithmId === "greedy" ||
-              algorithmId === "dfs" ||
-              algorithmId === "bfs" ||
-              algorithmId === "id") && (
-              <div className="grid grid-cols-1">
+          {/* Scrollbar en next step op vaste plek */}
+          <CardContent className="p-4">
+            <div className="flex flex-col h-[calc(100vh-12rem)]">
+              <div className="flex-1 overflow-y-auto pr-1 space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Stopping</label>
+                  <label className="text-sm font-medium">Graph Type</label>
                   <Select
-                    value={stoppingCriterion}
-                    onValueChange={setStoppingCriterion}
+                    value={selectedGraph}
+                    onValueChange={setSelectedGraph}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {stoppingOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
+                      {Object.entries(graphs).map(([key, graph]) => (
+                        <SelectItem key={key} value={key}>
+                          {graph.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-            )}
 
-            {(algorithmId === "greedy" ||
-              algorithmId === "dfs" ||
-              algorithmId === "bfs" ||
-              algorithmId === "id") && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Loop Breaking</label>
-                <Select value={loopBreaking} onValueChange={setLoopBreaking}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {loopBreakingOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedLoopBreakingOption && (
-                  <p className="text-xs text-muted-foreground">
-                    {selectedLoopBreakingOption.description}
-                  </p>
+                <div className="grid grid-cols-1">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Algorithm</label>
+                    <Select value={algorithmId} onValueChange={setAlgorithmId}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {algorithms.map((algorithm) => (
+                          <SelectItem key={algorithm.id} value={algorithm.id}>
+                            {algorithm.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {(algorithmId === "greedy" ||
+                  algorithmId === "dfs" ||
+                  algorithmId === "bfs" ||
+                  algorithmId === "id") && (
+                  <div className="grid grid-cols-1">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Stopping</label>
+                      <Select
+                        value={stoppingCriterion}
+                        onValueChange={setStoppingCriterion}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {stoppingOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {(algorithmId === "greedy" ||
+                  algorithmId === "dfs" ||
+                  algorithmId === "bfs" ||
+                  algorithmId === "id") && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Loop Breaking</label>
+                    <Select
+                      value={loopBreaking}
+                      onValueChange={setLoopBreaking}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {loopBreakingOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedLoopBreakingOption?.description}
+                    </p>
+                  </div>
+                )}
+
+                {algorithmId === "beam" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Beam Width</label>
+                    <Select
+                      value={beamWidth.toString()}
+                      onValueChange={(v) => setBeamWidth(Number(v))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3].map((w) => (
+                          <SelectItem key={w} value={w.toString()}>
+                            {w}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Start</label>
+                    <Select value={startNode} onValueChange={setStartNode}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {currentGraph.nodes.map((n) => (
+                          <SelectItem key={n.id} value={n.id}>
+                            {n.id}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Goal</label>
+                    <Select value={goalNode} onValueChange={setGoalNode}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {currentGraph.nodes.map((n) => (
+                          <SelectItem key={n.id} value={n.id}>
+                            {n.id}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Current Step Info */}
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                  <div className="text-sm text-gray-600 mb-2 min-h-[24px]">
+                    {currentStep?.description ?? "\u00A0"}
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-xs font-medium text-gray-700 mb-1">
+                      Path Queue ({algorithmId.toUpperCase()}):
+                    </div>
+                    <div className="text-xs text-gray-600 space-y-1 max-h-24 min-h-24 overflow-y-auto pr-1">
+                      {currentStep?.pathQueue?.length ? (
+                        currentStep.pathQueue.map((path, index) => {
+                          const tag = formatQueueTag(path);
+                          return (
+                            <div
+                              key={index}
+                              className="bg-white px-2 py-1 rounded border"
+                            >
+                              {path.join(" → ")}
+                              {tag && (
+                                <span className="ml-1 text-[11px] text-gray-500">
+                                  ({tag})
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-gray-400 italic">Empty</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {algorithmId === "idastar" && (
+                    <div className="text-xs text-gray-500 mt-2 min-h-[16px]">
+                      {currentStep?.bound !== undefined && (
+                        <>f-bound: {currentStep.bound}</>
+                      )}
+                      {currentStep?.fNew !== undefined && (
+                        <>
+                          {" "}
+                          {currentStep?.bound !== undefined && "|"} f-new:{" "}
+                          {currentStep.fNew === Infinity
+                            ? "∞"
+                            : currentStep.fNew}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Knoppen*/}
+              <div className="sticky bottom-0 bg-white/90 backdrop-blur border-t pt-2 mt-2">
+                <div className="flex gap-2">
+                  <Button
+                    onClick={nextStep}
+                    disabled={!canTakeNextStep}
+                    className="flex-1"
+                  >
+                    <ChevronRight className="w-4 h-4 mr-1" />
+                    Next Step
+                  </Button>
+                  <Button onClick={resetSearch} variant="outline">
+                    <RotateCcw className="w-4 h-4" />
+                  </Button>
+                </div>
+                {searchState.isComplete && (
+                  <div className="text-green-600 font-medium text-center mt-2">
+                    Goal Found!
+                  </div>
                 )}
               </div>
-            )}
-            {algorithmId === "beam" && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Beam Width</label>
-                <Select
-                  value={beamWidth.toString()}
-                  onValueChange={(value) => setBeamWidth(Number(value))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3].map((w) => (
-                      <SelectItem key={w} value={w.toString()}>
-                        {w}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Start</label>
-                <Select value={startNode} onValueChange={setStartNode}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currentGraph.nodes.map((node) => (
-                      <SelectItem key={node.id} value={node.id}>
-                        {node.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Goal</label>
-                <Select value={goalNode} onValueChange={setGoalNode}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currentGraph.nodes.map((node) => (
-                      <SelectItem key={node.id} value={node.id}>
-                        {node.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
-
-            <div className="flex gap-2">
-              <Button
-                onClick={nextStep}
-                disabled={!canTakeNextStep}
-                className="flex-1"
-              >
-                <ChevronRight className="w-4 h-4 mr-1" />
-                Next Step
-              </Button>
-              <Button onClick={resetSearch} variant="outline">
-                <RotateCcw className="w-4 h-4" />
-              </Button>
-            </div>
-
-            {searchState.isComplete && (
-              <div className="text-green-600 font-medium text-center">
-                Goal Found!
-              </div>
-            )}
-
-            {/* Current Step Info */}
-            {currentStep && (
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <div className="text-sm text-gray-600 mb-2">
-                  {currentStep.description}
-                </div>
-                {/* Path Queue Display */}
-                <div className="mt-3">
-                  <div className="text-xs font-medium text-gray-700 mb-1">
-                    Path Queue ({algorithmId.toUpperCase()}):
-                  </div>
-                  <div className="text-xs text-gray-600 space-y-1 max-h-20 overflow-y-auto">
-                    {currentStep.pathQueue.length > 0 ? (
-                      currentStep.pathQueue.map((path, index) => {
-                        const tag = formatQueueTag(path);
-                        return (
-                          <div
-                            key={index}
-                            className="bg-white px-2 py-1 rounded border"
-                          >
-                            {path.join(" → ")}
-                            {tag && (
-                              <span className="ml-1 text-[11px] text-gray-500">
-                                ({tag})
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="text-gray-400 italic">Empty</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-            {algorithmId === "idastar" &&
-              (currentStep?.bound !== undefined ||
-                currentStep?.fNew !== undefined) && (
-                <div className="text-xs text-gray-500 mb-2">
-                  {currentStep?.bound !== undefined && (
-                    <>f-bound: {currentStep.bound}</>
-                  )}
-                  {currentStep?.fNew !== undefined && (
-                    <>
-                      {" "}
-                      | f-new:{" "}
-                      {currentStep.fNew === Infinity ? "∞" : currentStep.fNew}
-                    </>
-                  )}
-                </div>
-              )}
           </CardContent>
         </Card>
 
@@ -616,7 +569,6 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                   selectedGraph === "ex31" ? "0 -25 550 420" : "0 0 500 320"
                 }
               >
-                {/* Edges */}
                 {currentGraph.edges.map((edge, index) => {
                   const fromNode = currentGraph.nodes.find(
                     (n) => n.id === edge.from
@@ -624,15 +576,6 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                   const toNode = currentGraph.nodes.find(
                     (n) => n.id === edge.to
                   )!;
-                  const edgeType = shouldHighlightEdge(edge.from, edge.to);
-                  const edgeCost = currentGraph.costs?.find(
-                    (c) =>
-                      (c.from === edge.from && c.to === edge.to) ||
-                      (c.from === edge.to && c.to === edge.from)
-                  )?.cost;
-
-                  const midX = (fromNode.x + toNode.x) / 2;
-                  const midY = (fromNode.y + toNode.y) / 2;
 
                   return (
                     <g key={index}>
@@ -643,8 +586,6 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                         y2={toNode.y}
                         className={getEdgeStyle(edge.from, edge.to)}
                       />
-
-                      {/* UCS Edge Cost */}
                       {(algorithmId === "ucs" ||
                         algorithmId === "astar" ||
                         algorithmId === "idastar") && (
@@ -671,7 +612,6 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                   );
                 })}
 
-                {/* Nodes */}
                 {currentGraph.nodes.map((node) => {
                   const state = getNodeState(node.id);
                   const heuristicValue = currentGraph.heuristics?.[node.id];
@@ -711,7 +651,6 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
               </svg>
             </div>
 
-            {/* Legend */}
             <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
