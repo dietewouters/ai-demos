@@ -7,6 +7,8 @@ import {
   type Constraint,
 } from "./csp-types";
 
+/* -------------------- utils -------------------- */
+
 function deepCloneDomains(
   domains: Record<string, string[]>
 ): Record<string, string[]> {
@@ -175,10 +177,8 @@ function formatScopeValues(c: Constraint, args: string[]): string {
   return c.scope.map((v, i) => `${v}=${args[i]}`).join(", ");
 }
 
-/**
- * Check of (variable=value) consistent is met ALLE constraints die deze variabele bevatten
- * en waarvan de overige variabelen al geassigneerd zijn. Geeft detail terug bij conflict.
- */
+/* --------- consistency helpers used by LCV/FC ---------- */
+
 function isConsistent(
   variable: string,
   value: string,
@@ -238,6 +238,8 @@ function canKeepValue(
   return true;
 }
 
+/* ----------------- selection / ordering ----------------- */
+
 function selectVariable(
   csp: CSP,
   domains: Record<string, string[]>,
@@ -245,28 +247,28 @@ function selectVariable(
   options: SolveOptions
 ): string {
   const unassigned = csp.variables.filter((v) => assignment[v] == null);
+
   if (options.variableOrdering === "alpha") {
     return [...unassigned].sort()[0];
   }
-  // MRV + degree tiebreak
+
+  // MRV + degree (tiebreak) + alpha (final tiebreak)
   const neigh = neighborsMap(csp);
-  let best = unassigned[0];
-  let bestDom = domains[best]?.length ?? Infinity;
-  let bestDeg = neigh[best]?.filter((n) => assignment[n] == null).length ?? 0;
-  for (const v of unassigned) {
-    const size = domains[v]?.length ?? Infinity;
-    const deg = neigh[v]?.filter((n) => assignment[n] == null).length ?? 0;
-    if (
-      size < bestDom ||
-      (size === bestDom && deg > bestDeg) ||
-      (size === bestDom && deg === bestDeg && v < best)
-    ) {
-      best = v;
-      bestDom = size;
-      bestDeg = deg;
-    }
-  }
-  return best;
+  return unassigned.reduce((best, v) => {
+    const sizeV = (domains[v] ?? []).length;
+    const sizeB = (domains[best] ?? []).length;
+
+    if (sizeV !== sizeB) return sizeV < sizeB ? v : best;
+
+    const degV = (neigh[v] ?? []).filter((n) => assignment[n] == null).length;
+    const degB = (neigh[best] ?? []).filter(
+      (n) => assignment[n] == null
+    ).length;
+
+    if (degV !== degB) return degV > degB ? v : best;
+
+    return v < best ? v : best; // alphabetical last tiebreak
+  }, unassigned[0]);
 }
 
 function orderValues(
@@ -303,6 +305,8 @@ function orderValues(
     .sort((a, b) => a.s - b.s || (a.v < b.v ? -1 : 1))
     .map((x) => x.v);
 }
+
+/* --------------- snapshots & push steps ---------------- */
 
 function snapshotOf(
   csp: CSP,
@@ -350,6 +354,9 @@ function pushStep(
     highlight,
   });
 }
+
+/* ---------------- LCV scoring (met per-constraint) --------------- */
+
 function lcvScores(
   csp: CSP,
   variable: string,
@@ -435,6 +442,29 @@ function lcvScores(
     return { value: val, totalEliminated, byNeighbor };
   });
 }
+
+/* ----------------- MRV -------------------- */
+function mrvScores(
+  csp: CSP,
+  domains: Record<string, string[]>,
+  assignment: Record<string, string | null>
+) {
+  const neigh = neighborsMap(csp);
+  const unassigned = csp.variables.filter((v) => assignment[v] == null);
+
+  return unassigned.map((v) => {
+    const dom = domains[v] ?? [];
+    const deg = (neigh[v] ?? []).filter((n) => assignment[n] == null).length;
+    return {
+      variable: v,
+      domainSize: dom.length,
+      domain: [...dom],
+      degreeUnassigned: deg,
+    };
+  });
+}
+
+/* ----------------- Forward Checking / AC-3 ----------------- */
 
 function forwardCheck(
   csp: CSP,
@@ -689,6 +719,8 @@ function ac3(
   return { ok: true, pruned: prunedAll };
 }
 
+/* -------------------------- SOLVER -------------------------- */
+
 export function solveCSP(
   csp: CSP,
   options: SolveOptions
@@ -698,33 +730,19 @@ export function solveCSP(
   for (const v of csp.variables) initialAssignment[v] = null;
   const initialDomains = deepCloneDomains(csp.domains);
 
-  const push = (s: CSPStepWithSnapshot) => {
-    steps.push(s);
-  };
+  const push = (s: CSPStepWithSnapshot) => steps.push(s);
 
-  // helper to render ONE constraint oriented left->right
+  // helper: render één constraint georiënteerd (voor check-steps)
   const formatConstraintOriented = (
     c: Constraint,
     left: string,
     right: string
   ) => {
-    // unary
     if (c.scope.length === 1) return `${left} ${symbolFor(c)}`;
 
-    // binary with special cases (= k, comparator±k)
     const raw = (c.label ?? symbolFor(c)).trim();
     const forward = c.scope[0] === left && c.scope[1] === right;
 
-    // = k  => left = right + k   (flip sign if reversed)
-    const mEq = raw.match(/^=\s*([+-]?\d+)$/);
-    if (mEq) {
-      let k = parseInt(mEq[1], 10);
-      if (!forward) k = -k;
-      const sign = k >= 0 ? "+ " : "- ";
-      return `${left} = ${right} ${sign}${Math.abs(k)}`;
-    }
-
-    // comparator with constant: op k
     const invert = (op: string) =>
       op === ">"
         ? "<"
@@ -735,6 +753,14 @@ export function solveCSP(
         : op === "≤" || op === "<="
         ? "≥"
         : op;
+
+    const mEq = raw.match(/^=\s*([+-]?\d+)$/);
+    if (mEq) {
+      let k = parseInt(mEq[1], 10);
+      if (!forward) k = -k;
+      const sign = k >= 0 ? "+ " : "- ";
+      return `${left} = ${right} ${sign}${Math.abs(k)}`;
+    }
 
     const mCmp = raw.match(/^([<>]=?|≥|≤)\s*([+-]?\d+)$/);
     if (mCmp) {
@@ -748,7 +774,6 @@ export function solveCSP(
       return `${left} ${op} ${right} ${sign}${Math.abs(k)}`;
     }
 
-    // absolute diff label like "|X - Y| ≥ 2" -> keep symmetric
     const mAbs = raw.match(/^\|.*\|\s*(≥|<=|>=|≤|<|>)\s*([+-]?\d+)$/);
     if (mAbs) {
       const op = mAbs[1] === ">=" ? "≥" : mAbs[1] === "<=" ? "≤" : mAbs[1];
@@ -756,9 +781,27 @@ export function solveCSP(
       return `|${left} - ${right}| ${op} ${k}`;
     }
 
-    // plain operator (≠, =, >, <, ≥, ≤)
     return `${left} ${forward ? raw : invert(raw)} ${right}`;
   };
+  function mrvScores(
+    csp: CSP,
+    domains: Record<string, string[]>,
+    assignment: Record<string, string | null>
+  ) {
+    const neigh = neighborsMap(csp);
+    const unassigned = csp.variables.filter((v) => assignment[v] == null);
+
+    return unassigned.map((v) => {
+      const dom = domains[v] ?? [];
+      const deg = (neigh[v] ?? []).filter((n) => assignment[n] == null).length;
+      return {
+        variable: v,
+        domainSize: dom.length,
+        domain: [...dom],
+        degreeUnassigned: deg,
+      };
+    });
+  }
 
   function backtrack(
     assignment: Record<string, string | null>,
@@ -772,12 +815,85 @@ export function solveCSP(
         { kind: "success", assignment: assignment as Record<string, string> },
         assignment,
         domains,
-        "Solution found"
+        "Solution found!"
       );
       return true;
     }
+    // --- MRV uitleg + selectie ---
+    let variable: string;
 
-    const variable = selectVariable(csp, domains, assignment, options);
+    if (options.variableOrdering === "mrv") {
+      const scores = mrvScores(csp, domains, assignment);
+
+      // sorteer alleen voor weergave: kleinste domein, dan hoogste degree, dan alfabetisch
+      const shown = [...scores].sort(
+        (a, b) =>
+          a.domainSize - b.domainSize ||
+          b.degreeUnassigned - a.degreeUnassigned ||
+          (a.variable < b.variable ? -1 : 1)
+      );
+
+      const minDom = Math.min(...scores.map((s) => s.domainSize));
+      const mrvCandidates = scores.filter((s) => s.domainSize === minDom);
+
+      let lines: string[] = [];
+      lines.push("MRV calculation:");
+      for (const s of shown) {
+        lines.push(
+          `  • ${s.variable}: |D| = ${s.domainSize} (${s.domain.join(
+            ", "
+          )}) AND unassigned neighbors=${s.degreeUnassigned}`
+        );
+      }
+
+      // tie-breaker op degree
+      let pick: string;
+      let degreeNote = "";
+      let alphaNote = "";
+
+      if (mrvCandidates.length === 1) {
+        pick = mrvCandidates[0].variable;
+      } else {
+        const maxDeg = Math.max(
+          ...mrvCandidates.map((s) => s.degreeUnassigned)
+        );
+        const degreeCandidates = mrvCandidates.filter(
+          (s) => s.degreeUnassigned === maxDeg
+        );
+        if (degreeCandidates.length === 1) {
+          pick = degreeCandidates[0].variable;
+          degreeNote = `\n + Tie-breaker: most constraints on remaining unassigned variables (degree = ${maxDeg}).`;
+        } else {
+          degreeCandidates.sort((a, b) =>
+            a.variable < b.variable ? -1 : a.variable > b.variable ? 1 : 0
+          );
+          pick = degreeCandidates[0].variable;
+          degreeNote = `\n + Tie-breaker: most constraints on remaining unassigned variables (degree = ${maxDeg})`;
+          alphaNote = `\n + Final tie-break: alphabetical order.`;
+        }
+      }
+
+      lines.push(`\n→ Pick ${pick} (min |D|)${degreeNote}${alphaNote}`);
+
+      // uitleg-stap (zoals bij LCV) + highlight
+      pushStep(
+        steps,
+        csp,
+        { kind: "select-variable-explain", variable: pick },
+        assignment,
+        domains,
+        lines.join("\n"),
+        { variable: pick }
+      );
+
+      variable = pick;
+    } else {
+      // bestaande alpha-variant
+      const unassigned = csp.variables.filter((v) => assignment[v] == null);
+      variable = [...unassigned].sort()[0];
+    }
+
+    // normale selectiestap (blijven doen, zodat UI consistent is)
     pushStep(
       steps,
       csp,
@@ -788,33 +904,33 @@ export function solveCSP(
       { variable }
     );
 
+    pushStep(
+      steps,
+      csp,
+      { kind: "select-variable", variable },
+      assignment,
+      domains,
+      `Select variable ${variable}`,
+      { variable }
+    );
+
+    /* -------- LCV uitleg (1 stap per waarde + samenvatting) -------- */
     if (options.valueOrdering === "lcv") {
       const scores = lcvScores(csp, variable, domains, assignment);
 
       for (const s of scores) {
-        const perValueLines: string[] = [];
-        perValueLines.push(`LCV calculation for ${variable} = ${s.value}`);
-        if (s.byNeighbor.length) {
-          for (const b of s.byNeighbor) {
-            const constraint = csp.constraints.find(
-              (c) => c.scope.includes(variable) && c.scope.includes(b.neighbor)
+        const lines: string[] = [];
+        lines.push(`LCV calculation for ${variable} = ${s.value}`);
+        for (const b of s.byNeighbor) {
+          lines.push(` - From ${b.neighbor}:`);
+          for (const pc of b.perConstraint) {
+            lines.push(
+              `    • ${pc.label}: eliminates {${pc.removed.join(", ")}}`
             );
-            const constraintLabel =
-              constraint?.label ||
-              `${variable} ${constraint?.type || ""} ${b.neighbor}`;
-
-            for (const pc of b.perConstraint || [
-              { label: constraintLabel, removed: b.removed },
-            ]) {
-              perValueLines.push(
-                `    • ${pc.label}: eliminates {${pc.removed.join(", ")}}`
-              );
-              perValueLines.push(` - From ${b.neighbor}:`);
-            }
           }
         }
-        perValueLines.push(
-          `  Total eliminated: ${s.totalEliminated} value${
+        lines.push(
+          `  => Total eliminated: ${s.totalEliminated} value${
             s.totalEliminated === 1 ? "" : "s"
           }`
         );
@@ -829,7 +945,7 @@ export function solveCSP(
           },
           assignment,
           domains,
-          perValueLines.join("\n"),
+          lines.join("\n"),
           { variable }
         );
       }
@@ -837,7 +953,7 @@ export function solveCSP(
       const summary: string[] = [`LCV summary for ${variable}:`];
       for (const s of scores) {
         summary.push(
-          ` • ${variable}=${s.value} → ${s.totalEliminated} values eliminated`
+          `  ${variable}=${s.value} → ${s.totalEliminated} eliminated.`
         );
       }
       pushStep(
@@ -849,7 +965,8 @@ export function solveCSP(
         summary.join("\n"),
         { variable }
       );
-      const orderedValues = orderValues(
+
+      const orderedValuesLCV = orderValues(
         csp,
         variable,
         domains,
@@ -862,16 +979,15 @@ export function solveCSP(
         {
           kind: "order-values",
           variable,
-          order: orderedValues,
+          order: orderedValuesLCV,
           heuristic: "lcv",
         },
         assignment,
         domains,
-        `Order for ${variable}: ${orderedValues.join(", ")}`,
+        `Order for ${variable}: ${orderedValuesLCV.join(", ")}`,
         { variable }
       );
     } else {
-      // Alphabetical explanation + order
       const ord = [...(domains[variable] ?? [])].sort();
       pushStep(
         steps,
@@ -892,7 +1008,10 @@ export function solveCSP(
       options
     );
 
+    /* ----------------- Try values + checks ----------------- */
+
     for (const value of orderedValues) {
+      // try-value (highlight try in DomainTable)
       pushStep(
         steps,
         csp,
@@ -900,14 +1019,12 @@ export function solveCSP(
         assignment,
         domains,
         `Try ${variable} = ${value}`,
-        {
-          variable,
-        }
+        { variable, tryingValue: value }
       );
-      // --- Check all constraints touching `variable` (unary + binary) ---
+
       let consistent = true;
 
-      // 1) Unary constraints on `variable`
+      // 1) Unary constraints: checking -> result (status kleurt edge/node)
       for (const c of csp.constraints) {
         if (c.scope.length === 1 && c.scope[0] === variable) {
           const ok = constraintSatisfied(c, value);
@@ -917,8 +1034,8 @@ export function solveCSP(
             {
               kind: "check-constraint",
               variable,
-              neighbor: variable, // UI: treat as unary (highlight node)
-              edge: [variable, variable], // optional; GraphView can ignore self-edge
+              neighbor: variable,
+              edge: [variable, variable],
               consistent: ok,
             },
             assignment,
@@ -926,28 +1043,25 @@ export function solveCSP(
             `Check unary constraint ${symbolFor(c)} on ${variable}: ${
               ok ? "OK" : "Conflict"
             }`,
-            { variable }
+            {
+              variable,
+              edge: [variable, variable],
+              constraintStatus: ok ? "ok" : "fail", // ✅ labelkleur
+              tryingValue: value,
+            }
           );
           if (!ok) {
             consistent = false;
-            // no need to check further constraints if unary already fails
             break;
           }
         }
       }
+      if (!consistent) continue;
 
-      if (!consistent) {
-        // skip assigning; next value will be tried
-        continue;
-      }
-
-      // 2) Binary (and n-ary) constraints that include `variable`
-      //    - If all other vars in the constraint are assigned, evaluate now
-      //    - Else: show a “pending” info step so the user sees it’ll be enforced later
+      // 2) Binary/n-ary constraints: checking -> result (per constraint)
       for (const c of csp.constraints) {
         if (!c.scope.includes(variable) || c.scope.length < 2) continue;
 
-        // collect values for all variables in this constraint
         const values: Record<string, string> = { [variable]: value };
         let ready = true;
         for (const v of c.scope) {
@@ -960,43 +1074,68 @@ export function solveCSP(
           values[v] = val;
         }
 
-        if (ready) {
-          // fully evaluable now
-          const args = c.scope.map((v) => values[v]);
-          const ok = constraintSatisfied(c, ...args);
+        const neighbor = c.scope.find((v) => v !== variable)!;
 
-          // choose a neighbor to highlight on the edge (first other var)
-          const neighbor = c.scope.find((v) => v !== variable)!;
-          const text = formatConstraintOriented(c, variable, neighbor);
-          pushStep(
-            steps,
-            csp,
-            {
-              kind: "check-constraint",
-              variable,
-              neighbor,
-              edge: [variable, neighbor],
-              consistent: ok,
-            },
-            assignment,
-            domains,
-            `Check ${text}: ${ok ? "OK" : "Conflict"}`,
-            { edge: [variable, neighbor], variable }
-          );
+        if (!ready) {
+          continue;
+        }
 
-          if (!ok) {
-            consistent = false;
-            break;
+        // checking (oranje)
+        const text = formatConstraintOriented(c, variable, neighbor);
+        pushStep(
+          steps,
+          csp,
+          {
+            kind: "check-constraint",
+            variable,
+            neighbor,
+            edge: [variable, neighbor],
+            consistent: true,
+          },
+          assignment,
+          domains,
+          `Checking ${text}...`,
+          {
+            edge: [variable, neighbor],
+            variable,
+            constraintStatus: "checking",
+            tryingValue: value,
           }
+        );
+
+        // result
+        const args = c.scope.map((v) => values[v]);
+        const ok = constraintSatisfied(c, ...args);
+
+        pushStep(
+          steps,
+          csp,
+          {
+            kind: "check-constraint",
+            variable,
+            neighbor,
+            edge: [variable, neighbor],
+            consistent: ok,
+          },
+          assignment,
+          domains,
+          `Check ${text}: ${ok ? "OK" : "Conflict"}`,
+          {
+            edge: [variable, neighbor],
+            variable,
+            constraintStatus: ok ? "ok" : "fail",
+            tryingValue: value,
+          }
+        );
+
+        if (!ok) {
+          consistent = false;
+          break;
         }
       }
+      if (!consistent) continue;
 
-      if (!consistent) {
-        // go to next value
-        continue;
-      }
-
-      // Consistentie-check die ook UNAIRE constraints evalueert en constraint-naam meegeeft
+      // extra guard (met naam van constraint)
       const ic = isConsistent(variable, value, assignment, csp);
       if (ic.ok !== true) {
         const c = ic.constraint;
@@ -1024,36 +1163,32 @@ export function solveCSP(
         assignment,
         domains,
         `Assign: ${variable} = ${value}`,
-        {
-          variable,
-        }
+        { variable }
       );
 
-      // Save domains snapshot to restore on backtrack
+      // Save domains snapshot for backtrack
       const savedDomains = deepCloneDomains(domains);
 
-      // Constraint propagation
+      // Propagation
       let propagationOK = true;
       if (options.algorithm === "BT_FC") {
-        const pusher = (s: CSPStepWithSnapshot) => push(s);
         const res = forwardCheck(
           csp,
           variable,
           value,
           domains,
           options.stepThroughFC,
-          pusher,
+          (s) => push(s),
           steps,
           assignment
         );
         if (!res.ok) propagationOK = false;
       } else if (options.algorithm === "BT_AC3") {
-        const pusher = (s: CSPStepWithSnapshot) => push(s);
         const res = ac3(
           csp,
           domains,
           options.stepThroughAC3,
-          pusher,
+          (s) => push(s),
           steps,
           assignment
         );
@@ -1065,7 +1200,7 @@ export function solveCSP(
         if (ok) return true;
       }
 
-      // Backtrack: unassign and restore domains
+      // Backtrack: unassign & restore
       pushStep(
         steps,
         csp,
@@ -1073,9 +1208,7 @@ export function solveCSP(
         assignment,
         domains,
         `Backtrack from ${variable}`,
-        {
-          variable,
-        }
+        { variable }
       );
       assignment[variable] = null;
       pushStep(
@@ -1085,9 +1218,7 @@ export function solveCSP(
         assignment,
         domains,
         `Undo: ${variable}`,
-        {
-          variable,
-        }
+        { variable }
       );
       for (const k in domains) domains[k] = [...savedDomains[k]];
     }
@@ -1108,6 +1239,7 @@ export function solveCSP(
     ),
     description: "Initially: no allocations, original domains",
   });
+
   const solutionFound = backtrack(
     { ...initialAssignment },
     deepCloneDomains(initialDomains)

@@ -6,7 +6,6 @@ import {
   type Snapshot,
   type Constraint,
 } from "@/components/csp/lib/csp-types";
-import { cn } from "@/lib/utils";
 
 type Props = {
   csp: CSP;
@@ -16,6 +15,7 @@ type Props = {
     edge?: [string, string];
     neighbor?: string;
     tryingValue?: string | null;
+    constraintStatus?: "checking" | "ok" | "fail";
   } | null;
 };
 
@@ -56,7 +56,7 @@ function invertOp(op: string): string {
   if (op === "<") return ">";
   if (op === "≥" || op === ">=") return "≤";
   if (op === "≤" || op === "<=") return "≥";
-  return op; // "=" of "≠"
+  return op;
 }
 
 function formatEdgeLabel(c: Constraint, left: string, right: string): string {
@@ -64,7 +64,6 @@ function formatEdgeLabel(c: Constraint, left: string, right: string): string {
   const forward =
     c.scope.length === 2 && c.scope[0] === left && c.scope[1] === right;
 
-  // 1) |X - Y| op k   (richting-symmetrisch)
   const mAbs = raw.match(
     /^\|\s*[A-Za-z]+\s*-\s*[A-Za-z]+\s*\|\s*(≥|<=|>=|≤|<|>)\s*([+-]?\d+)$/
   );
@@ -74,7 +73,6 @@ function formatEdgeLabel(c: Constraint, left: string, right: string): string {
     return `|${left} - ${right}| ${op} ${k}`;
   }
 
-  // 2) verschil-constante: "= k"  ⇒ left = right + k
   const mEqDiff = raw.match(/^=\s*([+-]?\d+)$/);
   if (mEqDiff) {
     let k = parseInt(mEqDiff[1], 10);
@@ -84,7 +82,6 @@ function formatEdgeLabel(c: Constraint, left: string, right: string): string {
     return `${left} = ${right} ${sign}${abs}`;
   }
 
-  // 3) comparator met constante: "op k"
   const mCmp = raw.match(/^([<>]=?|≥|≤)\s*([+-]?\d+)$/);
   if (mCmp) {
     let op = mCmp[1];
@@ -98,7 +95,6 @@ function formatEdgeLabel(c: Constraint, left: string, right: string): string {
     return `${left} ${op} ${right} ${sign}${abs}`;
   }
 
-  // 4) enkel operator
   let op = raw;
   if (!forward) op = invertOp(op);
   return `${left} ${op} ${right}`;
@@ -111,8 +107,10 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
   const assigned = snapshot?.assignment ?? {};
   const currentVar = highlight?.variable;
   const currentEdge = highlight?.edge;
+  const status = highlight?.constraintStatus;
   const prunedThisStep = snapshot?.prunedThisStep ?? [];
 
+  // maps opbouwen (geen JSX hier!)
   const edgeMap = new Map<
     string,
     { a: string; b: string; constraints: Constraint[] }
@@ -122,13 +120,12 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
   for (const c of csp.constraints) {
     if (c.scope.length === 1) {
       const v = c.scope[0];
-      if (!unaryConstraintsByVar[v]) unaryConstraintsByVar[v] = [];
-      unaryConstraintsByVar[v].push(c);
+      (unaryConstraintsByVar[v] ??= []).push(c);
     } else if (c.scope.length === 2) {
       const [a, b] = c.scope;
       const key = [a, b].sort().join("|");
-      const existing = edgeMap.get(key);
-      if (existing) existing.constraints.push(c);
+      const node = edgeMap.get(key);
+      if (node) node.constraints.push(c);
       else
         edgeMap.set(key, {
           a: key.split("|")[0],
@@ -139,14 +136,20 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
   }
   const edges = Array.from(edgeMap.values());
 
+  const getStrokeColor = (isHL: boolean) => {
+    if (!isHL) return "#d1d5db";
+    if (status === "ok") return "#22c55e";
+    if (status === "fail") return "#ef4444";
+    return "#f59e0b";
+  };
+
   return (
     <div className="w-full">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="w-full h-[360px] md:h-[420px]"
       >
-        {/* Edges met labels */}
-        {/* Eerst alleen de lijnen */}
+        {/* eerst lijnen */}
         {edges.map((e) => {
           const a = e.a;
           const b = e.b;
@@ -156,8 +159,6 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
             currentEdge &&
             ((currentEdge[0] === a && currentEdge[1] === b) ||
               (currentEdge[0] === b && currentEdge[1] === a));
-          const stroke = isHL ? "#f59e0b" : "#d1d5db";
-          const strokeWidth = isHL ? 4 : 2;
 
           return (
             <line
@@ -166,13 +167,13 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
               y1={posA.y}
               x2={posB.x}
               y2={posB.y}
-              stroke={stroke}
-              strokeWidth={strokeWidth}
+              stroke={getStrokeColor(!!isHL)}
+              strokeWidth={isHL ? 4 : 2}
             />
           );
         })}
 
-        {/* Dan de labels */}
+        {/* dan labels */}
         {edges.map((e) => {
           const a = e.a;
           const b = e.b;
@@ -209,9 +210,23 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
                 rx={4}
                 ry={4}
                 fill={
-                  isHL ? "rgba(255, 237, 213, 0.95)" : "rgba(255,255,255,0.9)"
+                  isHL
+                    ? status === "ok"
+                      ? "rgba(220, 252, 231, 0.95)"
+                      : status === "fail"
+                      ? "rgba(254, 226, 226, 0.95)"
+                      : "rgba(255, 237, 213, 0.95)"
+                    : "rgba(255,255,255,0.9)"
                 }
-                stroke={isHL ? "#f59e0b" : "#e5e7eb"}
+                stroke={
+                  isHL
+                    ? status === "ok"
+                      ? "#22c55e"
+                      : status === "fail"
+                      ? "#ef4444"
+                      : "#f59e0b"
+                    : "#e5e7eb"
+                }
                 strokeWidth={1}
               />
               <text
@@ -227,7 +242,7 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
           );
         })}
 
-        {/* Nodes + unary labels */}
+        {/* nodes + unary labels (met kleurstatus) */}
         {csp.variables.map((v) => {
           const pos = positions[v];
           const val = assigned[v];
@@ -236,6 +251,22 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
           const fill = isAssigned ? valueToColor(val) : "#f3f4f6";
           const stroke = isCurrent ? "#10b981" : "#6b7280";
           const ring = isCurrent ? 6 : 3;
+
+          // unary highlight?
+          const unaryActive =
+            (highlight?.edge &&
+              highlight.edge[0] === v &&
+              highlight.edge[1] === v) ||
+            (highlight?.variable === v && highlight?.neighbor === v);
+
+          const unaryFill =
+            unaryActive && status === "checking"
+              ? "#f59e0b"
+              : unaryActive && status === "ok"
+              ? "#22c55e"
+              : unaryActive && status === "fail"
+              ? "#ef4444"
+              : "#6b7280";
 
           return (
             <g key={v} transform={`translate(${pos.x}, ${pos.y})`}>
@@ -256,12 +287,11 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
                 textAnchor="middle"
                 y={5}
                 className="fill-black font-bold"
-                style={{ fontSize: 20, fontWeight: "700" }}
+                style={{ fontSize: 20, fontWeight: 700 as any }}
               >
                 {v}
               </text>
 
-              {/* Huidige waarde (indien toegekend) */}
               {isAssigned ? (
                 <text
                   textAnchor="middle"
@@ -281,20 +311,19 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
                   —
                 </text>
               )}
-              {/* Unary constraint labels boven de node */}
+
               {unaryConstraintsByVar[v]?.map((c, i) => (
                 <text
                   key={`label-${v}-${i}`}
                   textAnchor="middle"
                   y={-35 - i * 14}
-                  className="fill-zinc-500 font-mono"
-                  style={{ fontSize: 15, fontWeight: 600 }}
+                  style={{ fontSize: 15, fontWeight: 600, fill: unaryFill }}
+                  pointerEvents="none"
                 >
                   {symbolFor(c)}
                 </text>
               ))}
 
-              {/* Pulse als er net waarden voor deze node gepruned zijn */}
               {prunedThisStep.some((p) => p.variable === v) && (
                 <circle
                   r={32}

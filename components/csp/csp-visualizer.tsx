@@ -280,11 +280,19 @@ export default function CSPVisualizer() {
                 </Tooltip>
               </div>
 
-              <div className="text-sm text-muted-foreground">
+              <div className="text-sm">
                 {idx >= 0 && steps[idx] ? (
                   <>
                     <div className="font-medium text-foreground"></div>
-                    <div>{steps[idx].description}</div>
+                    <div
+                      className={
+                        steps[idx].kind === "success"
+                          ? "text-green-600 font-semibold"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      {steps[idx].description}
+                    </div>
                   </>
                 ) : (
                   <div></div>
@@ -305,6 +313,7 @@ export default function CSPVisualizer() {
                   variables={exercise.variables}
                   initialDomains={exercise.domains}
                   snapshot={currentSnapshot}
+                  highlight={currentStep?.highlight}
                 />
               </Card>
             </div>

@@ -11,10 +11,19 @@ import {
 } from "@/components/ui/table";
 import { type Snapshot } from "@/components/csp/lib/csp-types";
 
+type Highlight = {
+  variable?: string;
+  edge?: [string, string];
+  neighbor?: string;
+  tryingValue?: string | null;
+} | null;
+
 type Props = {
   variables: string[];
   initialDomains: Record<string, string[]>;
   snapshot: Snapshot | null;
+  /** NIEUW: highlight van de huidige stap (b.v. try-value C=2) */
+  highlight?: Highlight;
 };
 
 function isEliminated(initial: string[], current: string[], value: string) {
@@ -25,11 +34,15 @@ export default function DomainTable({
   variables,
   initialDomains,
   snapshot,
+  highlight,
 }: Props) {
   const domains = snapshot?.domains ?? initialDomains;
   const assignment = snapshot?.assignment ?? {};
   const prunedStep = snapshot?.prunedThisStep ?? [];
   const currentVar = snapshot?.focus?.variable;
+
+  const hv = highlight?.variable;
+  const trying = highlight?.tryingValue ?? null;
 
   return (
     <div className="w-full overflow-auto">
@@ -46,6 +59,7 @@ export default function DomainTable({
             const init = initialDomains[v] ?? [];
             const curr = domains[v] ?? [];
             const assigned = assignment[v] ?? null;
+
             return (
               <TableRow
                 key={v}
@@ -56,9 +70,13 @@ export default function DomainTable({
                   {init.map((val) => {
                     const eliminated = isEliminated(init, curr, val);
                     const isAssigned = assigned === val;
+
+                    const isTrying = hv === v && trying === val;
+
                     const prunedNow = prunedStep.some(
                       (p) => p.variable === v && p.value === val
                     );
+
                     return (
                       <Badge
                         key={val}
@@ -70,19 +88,24 @@ export default function DomainTable({
                             : "outline"
                         }
                         className={[
-                          "px-2",
+                          "px-2 transition-colors",
                           isAssigned
-                            ? "bg-emerald-500 hover:bg-emerald-500 text-white"
+                            ? "bg-blue-400 hover:bg-blue-400 text-white"
                             : "",
                           eliminated ? "line-through opacity-60" : "",
                           prunedNow ? "ring-2 ring-red-400" : "",
+                          isTrying
+                            ? "bg-amber-100 text-amber-900 ring-2 ring-amber-400"
+                            : "",
                         ].join(" ")}
                         title={
                           isAssigned
-                            ? "Gekozen"
+                            ? "Chosen"
                             : eliminated
-                            ? "Geëlimineerd"
-                            : "Beschikbaar"
+                            ? "Eliminated"
+                            : isTrying
+                            ? "Currently checking this value"
+                            : "Available"
                         }
                       >
                         {val}
@@ -92,7 +115,7 @@ export default function DomainTable({
                 </TableCell>
                 <TableCell>
                   {assigned ? (
-                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">
+                    <Badge className="bg-blue-400 hover:bg-blue-400 text-white">
                       {assigned}
                     </Badge>
                   ) : (

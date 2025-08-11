@@ -36,6 +36,7 @@ export type Snapshot = {
 
 export type CSPStep =
   | { kind: "select-variable"; variable: string }
+  | { kind: "select-variable-explain"; variable: string }
   | {
       kind: "order-values";
       variable: string;
@@ -89,5 +90,7 @@ export type CSPStepWithSnapshot = {
     edge?: [string, string];
     neighbor?: string;
     tryingValue?: string | null;
+    constraintStatus?: "checking" | "ok" | "fail";
   };
+  kind?: "success" | "normal" | "failure";
 };
