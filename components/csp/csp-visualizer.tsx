@@ -53,7 +53,7 @@ const DEFAULT_OPTIONS: SolveOptions = {
 };
 
 export default function CSPVisualizer() {
-  const [exerciseId, setExerciseId] = useState<string>("triangle");
+  const [exerciseId, setExerciseId] = useState<string>("4houses");
   const exercise = useMemo<CSP>(
     () => EXERCISES.find((e) => e.id === exerciseId)!,
     [exerciseId]
@@ -189,7 +189,7 @@ export default function CSPVisualizer() {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-1">
                 <div className="space-y-2">
                   <Label>Variable ordering</Label>
                   <Select
@@ -202,11 +202,14 @@ export default function CSPVisualizer() {
                     <SelectContent>
                       <SelectItem value="alpha">Alphabetically</SelectItem>
                       <SelectItem value="mrv">
-                        MRV + tiebreak (most constraints)
+                        MRV (Most remaining values) + Tiebreak (Most
+                        constraints)
                       </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-1">
                 <div className="space-y-2">
                   <Label>Value ordering</Label>
                   <Select
@@ -219,7 +222,7 @@ export default function CSPVisualizer() {
                     <SelectContent>
                       <SelectItem value="alpha">Alphabetically</SelectItem>
                       <SelectItem value="lcv">
-                        LCV (Least constraining)
+                        LCV (Least constraining value)
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -280,9 +283,7 @@ export default function CSPVisualizer() {
               <div className="text-sm text-muted-foreground">
                 {idx >= 0 && steps[idx] ? (
                   <>
-                    <div className="font-medium text-foreground">
-                      Step {idx + 1} / {steps.length}
-                    </div>
+                    <div className="font-medium text-foreground"></div>
                     <div>{steps[idx].description}</div>
                   </>
                 ) : (

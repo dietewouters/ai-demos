@@ -51,6 +51,59 @@ function symbolFor(c: Constraint): string {
   return "⋆";
 }
 
+function invertOp(op: string): string {
+  if (op === ">") return "<";
+  if (op === "<") return ">";
+  if (op === "≥" || op === ">=") return "≤";
+  if (op === "≤" || op === "<=") return "≥";
+  return op; // "=" of "≠"
+}
+
+function formatEdgeLabel(c: Constraint, left: string, right: string): string {
+  const raw = (c.label ?? symbolFor(c)).trim();
+  const forward =
+    c.scope.length === 2 && c.scope[0] === left && c.scope[1] === right;
+
+  // 1) |X - Y| op k   (richting-symmetrisch)
+  const mAbs = raw.match(
+    /^\|\s*[A-Za-z]+\s*-\s*[A-Za-z]+\s*\|\s*(≥|<=|>=|≤|<|>)\s*([+-]?\d+)$/
+  );
+  if (mAbs) {
+    const op = mAbs[1] === ">=" ? "≥" : mAbs[1] === "<=" ? "≤" : mAbs[1];
+    const k = parseInt(mAbs[2], 10);
+    return `|${left} - ${right}| ${op} ${k}`;
+  }
+
+  // 2) verschil-constante: "= k"  ⇒ left = right + k
+  const mEqDiff = raw.match(/^=\s*([+-]?\d+)$/);
+  if (mEqDiff) {
+    let k = parseInt(mEqDiff[1], 10);
+    if (!forward) k = -k;
+    const sign = k >= 0 ? "+ " : "- ";
+    const abs = Math.abs(k);
+    return `${left} = ${right} ${sign}${abs}`;
+  }
+
+  // 3) comparator met constante: "op k"
+  const mCmp = raw.match(/^([<>]=?|≥|≤)\s*([+-]?\d+)$/);
+  if (mCmp) {
+    let op = mCmp[1];
+    let k = parseInt(mCmp[2], 10);
+    if (!forward) {
+      op = invertOp(op);
+      k = -k;
+    }
+    const sign = k >= 0 ? "+ " : "- ";
+    const abs = Math.abs(k);
+    return `${left} ${op} ${right} ${sign}${abs}`;
+  }
+
+  // 4) enkel operator
+  let op = raw;
+  if (!forward) op = invertOp(op);
+  return `${left} ${op} ${right}`;
+}
+
 export default function GraphView({ csp, snapshot, highlight }: Props) {
   const width = 900;
   const height = 420;
@@ -92,6 +145,8 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
         viewBox={`0 0 ${width} ${height}`}
         className="w-full h-[360px] md:h-[420px]"
       >
+        {/* Edges met labels */}
+        {/* Eerst alleen de lijnen */}
         {edges.map((e) => {
           const a = e.a;
           const b = e.b;
@@ -104,6 +159,30 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
           const stroke = isHL ? "#f59e0b" : "#d1d5db";
           const strokeWidth = isHL ? 4 : 2;
 
+          return (
+            <line
+              key={`line-${a}-${b}`}
+              x1={posA.x}
+              y1={posA.y}
+              x2={posB.x}
+              y2={posB.y}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+            />
+          );
+        })}
+
+        {/* Dan de labels */}
+        {edges.map((e) => {
+          const a = e.a;
+          const b = e.b;
+          const posA = positions[a];
+          const posB = positions[b];
+          const isHL =
+            currentEdge &&
+            ((currentEdge[0] === a && currentEdge[1] === b) ||
+              (currentEdge[0] === b && currentEdge[1] === a));
+
           const mx = (posA.x + posB.x) / 2;
           const my = (posA.y + posB.y) / 2;
           const dx = posB.x - posA.x;
@@ -115,23 +194,13 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
           const lx = mx + nx * offset;
           const ly = my + ny * offset;
 
-          const labelTexts = e.constraints.map(
-            (c) => `${c.scope[0]} ${symbolFor(c)} ${c.scope[1]}`
-          );
-          const label = labelTexts.join(" ∧ ");
+          const labelTexts = e.constraints.map((c) => formatEdgeLabel(c, a, b));
+          const label = labelTexts.join(" AND ");
           const approxW = Math.max(28, label.length * 7 + 10);
           const approxH = 18;
 
           return (
-            <g key={`${a}-${b}`}>
-              <line
-                x1={posA.x}
-                y1={posA.y}
-                x2={posB.x}
-                y2={posB.y}
-                stroke={stroke}
-                strokeWidth={strokeWidth}
-              />
+            <g key={`label-${a}-${b}`}>
               <rect
                 x={lx - approxW / 2}
                 y={ly - approxH / 2}
@@ -150,7 +219,7 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
                 y={ly + 5}
                 textAnchor="middle"
                 className="fill-zinc-700"
-                style={{ fontSize: 12, fontWeight: 600 }}
+                style={{ fontSize: 15, fontWeight: 600 }}
               >
                 {label}
               </text>
@@ -158,6 +227,7 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
           );
         })}
 
+        {/* Nodes + unary labels */}
         {csp.variables.map((v) => {
           const pos = positions[v];
           const val = assigned[v];
@@ -177,29 +247,54 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
                 opacity={0.7}
               />
               <circle
-                r={22}
+                r={30}
                 fill={fill}
                 stroke={stroke}
                 strokeWidth={isCurrent ? 3 : 1.5}
               />
               <text
                 textAnchor="middle"
-                y={6}
-                className="fill-black font-medium"
+                y={5}
+                className="fill-black font-bold"
+                style={{ fontSize: 20, fontWeight: "700" }}
               >
                 {v}
               </text>
+
+              {/* Huidige waarde (indien toegekend) */}
+              {isAssigned ? (
+                <text
+                  textAnchor="middle"
+                  y={15}
+                  className="fill-zinc-800"
+                  style={{ fontSize: 10, fontWeight: 500 }}
+                >
+                  {String(val)}
+                </text>
+              ) : (
+                <text
+                  textAnchor="middle"
+                  y={15}
+                  className="fill-zinc-400"
+                  style={{ fontSize: 11 }}
+                >
+                  —
+                </text>
+              )}
+              {/* Unary constraint labels boven de node */}
               {unaryConstraintsByVar[v]?.map((c, i) => (
                 <text
                   key={`label-${v}-${i}`}
                   textAnchor="middle"
-                  y={-30 - i * 14}
+                  y={-35 - i * 14}
                   className="fill-zinc-500 font-mono"
-                  style={{ fontSize: 15 }}
+                  style={{ fontSize: 15, fontWeight: 600 }}
                 >
                   {symbolFor(c)}
                 </text>
               ))}
+
+              {/* Pulse als er net waarden voor deze node gepruned zijn */}
               {prunedThisStep.some((p) => p.variable === v) && (
                 <circle
                   r={32}

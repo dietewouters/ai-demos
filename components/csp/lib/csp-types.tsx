@@ -42,6 +42,16 @@ export type CSPStep =
       order: string[];
       heuristic: "alpha" | "lcv";
     }
+  | {
+      kind: "order-values-explain";
+      variable: string;
+      heuristic: "alpha" | "lcv";
+      scores?: Array<{
+        value: string;
+        totalEliminated: number;
+        byNeighbor: Array<{ neighbor: string; removed: string[] }>;
+      }>;
+    }
   | { kind: "try-value"; variable: string; value: string }
   | {
       kind: "check-constraint";
