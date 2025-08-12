@@ -19,7 +19,11 @@ const links = [
   {
     name: "CSP",
     href: "/mainpage/csp",
-    children: [{ name: "General", href: "/mainpage/csp/general" }],
+    children: [
+      { name: "General", href: "/mainpage/csp/general" },
+      { name: "Forward checking", href: "/mainpage/csp/fc" },
+      { name: "AC-3", href: "/mainpage/csp/ac-3" },
+    ],
   },
 
   { name: "Propositional Logic", href: "/mainpage/propositionallogic" },
