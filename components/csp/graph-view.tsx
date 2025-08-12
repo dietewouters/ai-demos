@@ -196,7 +196,10 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
           const lx = mx + nx * offset;
           const ly = my + ny * offset;
 
-          const labelTexts = e.constraints.map((c) => formatEdgeLabel(c, a, b));
+          const labelTexts = e.constraints.map((c) =>
+            formatEdgeLabel(c, c.scope[0], c.scope[1])
+          );
+
           const label = labelTexts.join(" AND ");
           const approxW = Math.max(28, label.length * 7 + 10);
           const approxH = 18;

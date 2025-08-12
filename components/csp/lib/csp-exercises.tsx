@@ -14,6 +14,13 @@ export const EXERCISES: CSP[] = [
     constraints: [
       { scope: ["A", "B"], type: "neq" },
       { scope: ["A", "C"], type: "neq" },
+      {
+        scope: ["A", "D"],
+        type: "custom",
+        label: "= -1",
+        predicate: ({ d, a }: Record<string, string>) =>
+          Number(d) - Number(a) === -1,
+      },
       { scope: ["B", "C"], type: "neq" },
       {
         scope: ["B"],
@@ -27,24 +34,18 @@ export const EXERCISES: CSP[] = [
         label: "≠ 3",
         predicate: ({ C }) => Number(C) !== 3,
       },
-      {
-        scope: ["C", "D"],
-        type: "custom",
-        label: ">",
-        predicate: ({ d, c }: Record<string, string>) => Number(c) > Number(d),
-      },
-      {
-        scope: ["D", "A"],
-        type: "custom",
-        label: "= -1",
-        predicate: ({ d, a }: Record<string, string>) =>
-          Number(d) - Number(a) === -1,
-      },
+
       {
         scope: ["B", "D"],
         type: "custom",
         label: "|B - D| ≥ 2",
         predicate: ({ b, d }) => Math.abs(Number(b) - Number(d)) >= 2,
+      },
+      {
+        scope: ["C", "D"],
+        type: "custom",
+        label: ">",
+        predicate: ({ d, c }: Record<string, string>) => Number(c) > Number(d),
       },
     ],
     positions: {
@@ -59,10 +60,10 @@ export const EXERCISES: CSP[] = [
     name: "4 teachers problem",
     variables: ["A", "B", "C", "D"],
     domains: {
-      A: ["1", "2", "3", "4"],
-      B: ["1", "2", "3", "4"],
-      C: ["1", "2", "3", "4"],
-      D: ["1", "2", "3", "4"],
+      A: ["1", "2", "3", "4", "5"],
+      B: ["1", "2", "3", "4", "5"],
+      C: ["1", "2", "3", "4", "5"],
+      D: ["1", "2", "3", "4", "5"],
     },
     constraints: [
       { scope: ["A", "B"], type: "neq" },
@@ -97,13 +98,14 @@ export const EXERCISES: CSP[] = [
         scope: ["D"],
         type: "custom",
         label: "≥ 3",
-        predicate: ({ d }: Record<string, string>) => Number(d) >= 3,
+        predicate: (vals: Record<string, string>) =>
+          Number(vals.D ?? vals.d) >= 3,
       },
       {
-        scope: ["B", "C"],
+        scope: ["C", "B"],
         type: "custom",
         label: "|C - B| > 1",
-        predicate: ({ b, c }) => Math.abs(Number(c) - Number(b)) > 1,
+        predicate: ({ c, b }) => Math.abs(Number(c) - Number(b)) > 1,
       },
     ],
     positions: {

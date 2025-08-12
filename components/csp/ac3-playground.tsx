@@ -191,6 +191,136 @@ function constraintSatisfied(c: Constraint, ...args: string[]): boolean {
   }
   return true;
 }
+function unaryFilterDomains(
+  csp: CSP,
+  assignment: Record<string, string | null>,
+  domains: Record<string, string[]>,
+  push: (s: CSPStepWithSnapshot) => void
+) {
+  // Optioneel: start banner
+  push({
+    step: { kind: "unary-filter-start" } as any,
+    snapshot: snapshotOf(csp, assignment, domains, undefined, [], undefined),
+    description: "Unary constraints pre-pass: filter domains",
+  });
+
+  for (const c of csp.constraints) {
+    if (c.scope.length !== 1) continue;
+    const v = c.scope[0];
+    const dom = domains[v];
+
+    // Als v al toegewezen is: toon check voor die ene waarde
+    if (assignment[v] != null) {
+      const val = assignment[v] as string;
+
+      // checking (oranje)
+      push({
+        step: {
+          kind: "check-constraint",
+          variable: v,
+          neighbor: v,
+          edge: [v, v],
+          consistent: true,
+        } as any,
+        snapshot: snapshotOf(csp, assignment, domains, v, [], undefined),
+        description: `Check unary ${symbolFor(c)} on ${v} with ${v}=${val}`,
+        highlight: { variable: v, edge: [v, v], constraintStatus: "checking" },
+      });
+
+      const ok = constraintSatisfied(c, val);
+      // resultaat (groen/rood)
+      push({
+        step: {
+          kind: "check-constraint-result",
+          variable: v,
+          neighbor: v,
+          edge: [v, v],
+          consistent: ok,
+        } as any,
+        snapshot: snapshotOf(csp, assignment, domains, v, [], undefined),
+        description: `${ok ? "OK" : "Conflict"}: ${v}=${val} ${
+          ok ? "satisfies" : "violates"
+        } ${symbolFor(c)}`,
+        highlight: {
+          variable: v,
+          edge: [v, v],
+          constraintStatus: ok ? "ok" : "fail",
+        },
+      });
+
+      // NB: we wijzigen het domein niet (blijft singleton). Eventueel kun je hier aborteren als ok=false.
+      continue;
+    }
+
+    // Niet toegewezen: filter domein VOORUIT (natuurlijke volgorde)
+    let i = 0;
+    while (i < dom.length) {
+      const val = dom[i];
+
+      // checking (oranje)
+      push({
+        step: {
+          kind: "check-constraint",
+          variable: v,
+          neighbor: v,
+          edge: [v, v],
+          consistent: true,
+        } as any,
+        snapshot: snapshotOf(csp, assignment, domains, v, [], undefined),
+        description: `Check unary ${symbolFor(c)} on ${v} with ${v}=${val}`,
+        highlight: { variable: v, edge: [v, v], constraintStatus: "checking" },
+      });
+
+      const ok = constraintSatisfied(c, val);
+      if (!ok) {
+        // verwijder val en NIET i++
+        dom.splice(i, 1);
+
+        push({
+          step: {
+            kind: "unary-filter-eliminate",
+            variable: v,
+            valueEliminated: val,
+          } as any,
+          snapshot: snapshotOf(
+            csp,
+            assignment,
+            domains,
+            v,
+            [{ variable: v, value: val }],
+            undefined
+          ),
+          description: `Unary filter: remove ${val} from domain(${v}) due to ${symbolFor(
+            c
+          )}`,
+          highlight: { variable: v, edge: [v, v], constraintStatus: "fail" },
+        });
+      } else {
+        // OK → groen, en i++
+        push({
+          step: {
+            kind: "check-constraint-result",
+            variable: v,
+            neighbor: v,
+            edge: [v, v],
+            consistent: true,
+          } as any,
+          snapshot: snapshotOf(csp, assignment, domains, v, [], undefined),
+          description: `OK: ${v}=${val} satisfies ${symbolFor(c)}`,
+          highlight: { variable: v, edge: [v, v], constraintStatus: "ok" },
+        });
+        i++;
+      }
+    }
+  }
+
+  // Optioneel: einde banner
+  push({
+    step: { kind: "unary-filter-end" } as any,
+    snapshot: snapshotOf(csp, assignment, domains, undefined, [], undefined),
+    description: "Unary pre-pass finished",
+  });
+}
 
 /* --------------------------- AC-3 (stepping) --------------------------- */
 
@@ -216,7 +346,7 @@ function runAC3Steps(
 
   const queue: Array<[string, string]> = [];
   const inQueue = new Set<string>();
-
+  unaryFilterDomains(csp, assignment, domains, (s) => steps.push(s));
   // 1) Pas enqueueArc aan
   const enqueueArc = (i: string, j: string, reason?: string) => {
     const k = key(i, j);

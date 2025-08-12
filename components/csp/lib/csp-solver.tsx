@@ -58,6 +58,7 @@ function findConstraint(
         (c.scope[0] === b && c.scope[1] === a))
   );
 }
+
 function lockAssignedDomains(
   domains: Record<string, string[]>,
   assignment: Record<string, string | null>
@@ -65,19 +66,13 @@ function lockAssignedDomains(
   for (const v in assignment) {
     const val = assignment[v];
     if (val != null) {
-      // Vervang volledige domein door enkel de toegewezen waarde
       domains[v] = [val];
     }
   }
 }
 
 function opText(csp: CSP, from: string, to: string): string {
-  const cons = csp.constraints.find(
-    (c) =>
-      c.scope.length === 2 &&
-      ((c.scope[0] === from && c.scope[1] === to) ||
-        (c.scope[0] === to && c.scope[1] === from))
-  );
+  const cons = findConstraint(csp, from, to);
   if (!cons) return `${from} ? ${to}`;
   return formatConstraintOriented(cons, from, to);
 }
@@ -94,20 +89,20 @@ function callPredicate(c: Constraint, args: string[]): boolean {
   }
   const vals = { ...valsOrig, ...valsLower };
 
-  const results: boolean[] = [];
+  try {
+    const rObj = (c.predicate as any)(vals);
+    if (typeof rObj === "boolean") return rObj;
+  } catch {
+    //
+  }
+
   try {
     if ((c.predicate as any).length >= c.scope.length) {
-      const r = (c.predicate as any)(...args);
-      if (typeof r === "boolean") results.push(r);
+      const rPos = (c.predicate as any)(...args);
+      if (typeof rPos === "boolean") return rPos;
     }
   } catch {}
-  try {
-    const r2 = (c.predicate as any)(vals);
-    if (typeof r2 === "boolean") results.push(r2);
-  } catch {}
 
-  if (results.includes(false)) return false;
-  if (results.includes(true)) return true;
   return true;
 }
 
@@ -164,7 +159,67 @@ function formatScopeValues(c: Constraint, args: string[]): string {
   return c.scope.map((v, i) => `${v}=${args[i]}`).join(", ");
 }
 
-/* --------- consistency helpers used by LCV/FC ---------- */
+/* ------------ oriented label (for pretty explanations) ------------ */
+
+function invertOp(op: string): string {
+  if (op === ">") return "<";
+  if (op === "<") return ">";
+  if (op === "≥" || op === ">=") return "≤";
+  if (op === "≤" || op === "<=") return "≥";
+  return op;
+}
+
+function formatConstraintOriented(
+  c: Constraint,
+  left: string,
+  right: string
+): string {
+  const raw = (
+    c.label ?? (c.type === "neq" ? "≠" : c.type === "eq" ? "=" : "⋆")
+  ).trim();
+
+  // Unary
+  if (c.scope.length === 1) return `${left} ${raw}`;
+
+  const forward = c.scope[0] === left && c.scope[1] === right;
+
+  // |X - Y| ◊ k
+  const mAbs = raw.match(
+    /^\|\s*[A-Za-z]+\s*-\s*[A-Za-z]+\s*\|\s*(≥|<=|>=|≤|<|>)\s*([+-]?\d+)$/
+  );
+  if (mAbs) {
+    const op = mAbs[1] === ">=" ? "≥" : mAbs[1] === "<=" ? "≤" : mAbs[1];
+    const k = parseInt(mAbs[2], 10);
+    return `|${left} - ${right}| ${op} ${k}`;
+  }
+
+  // "= k"  → left = right ± k  (flip sign if reversed)
+  const mEqDiff = raw.match(/^=\s*([+-]?\d+)$/);
+  if (mEqDiff) {
+    let k = parseInt(mEqDiff[1], 10);
+    if (!forward) k = -k;
+    const sign = k >= 0 ? "+ " : "- ";
+    return `${left} = ${right} ${sign}${Math.abs(k)}`;
+  }
+
+  // "◊ k"  → left ◊ right ± k (invert op + flip sign if reversed)
+  const mCmp = raw.match(/^([<>]=?|≥|≤)\s*([+-]?\d+)$/);
+  if (mCmp) {
+    let op = mCmp[1];
+    let k = parseInt(mCmp[2], 10);
+    if (!forward) {
+      op = invertOp(op);
+      k = -k;
+    }
+    const sign = k >= 0 ? "+ " : "- ";
+    return `${left} ${op} ${right} ${sign}${Math.abs(k)}`;
+  }
+
+  // plain op
+  return `${left} ${forward ? raw : invertOp(raw)} ${right}`;
+}
+
+/* --------- consistency helpers (used by BT-only path) ---------- */
 
 function isConsistent(
   variable: string,
@@ -430,8 +485,9 @@ function lcvScores(
   });
 }
 
-/* ----------------- MRV -------------------- */
-function mrvScores(
+/* ----------------- MRV explanation helper -------------------- */
+
+function mrvScoresExplain(
   csp: CSP,
   domains: Record<string, string[]>,
   assignment: Record<string, string | null>
@@ -452,92 +508,6 @@ function mrvScores(
 }
 
 /* ----------------- Forward Checking / AC-3 ----------------- */
-function firstFailingConstraint(
-  csp: CSP,
-  variableY: string,
-  y: string,
-  assignmentPlus: Record<string, string | null>
-): { constraint: Constraint; args: string[] } | null {
-  for (const c of csp.constraints) {
-    if (!c.scope.includes(variableY)) continue;
-
-    const values: Record<string, string> = { [variableY]: y };
-    let ready = true;
-    for (const v of c.scope) {
-      if (v === variableY) continue;
-      const vv = assignmentPlus[v];
-      if (vv == null) {
-        ready = false;
-        break;
-      }
-      values[v] = vv;
-    }
-    if (!ready) continue;
-
-    const args = c.scope.map((v) => values[v]);
-    if (!constraintSatisfied(c, ...args)) {
-      return { constraint: c, args };
-    }
-  }
-  return null;
-}
-function invertOp(op: string): string {
-  if (op === ">") return "<";
-  if (op === "<") return ">";
-  if (op === "≥" || op === ">=") return "≤";
-  if (op === "≤" || op === "<=") return "≥";
-  return op;
-}
-
-function formatConstraintOriented(
-  c: Constraint,
-  left: string,
-  right: string
-): string {
-  const raw = (
-    c.label ?? (c.type === "neq" ? "≠" : c.type === "eq" ? "=" : "⋆")
-  ).trim();
-
-  // Unary
-  if (c.scope.length === 1) return `${left} ${raw}`;
-
-  const forward = c.scope[0] === left && c.scope[1] === right;
-
-  // |X - Y| ◊ k
-  const mAbs = raw.match(
-    /^\|\s*[A-Za-z]+\s*-\s*[A-Za-z]+\s*\|\s*(≥|<=|>=|≤|<|>)\s*([+-]?\d+)$/
-  );
-  if (mAbs) {
-    const op = mAbs[1] === ">=" ? "≥" : mAbs[1] === "<=" ? "≤" : mAbs[1];
-    const k = parseInt(mAbs[2], 10);
-    return `|${left} - ${right}| ${op} ${k}`;
-  }
-
-  // "= k"  → left = right ± k  (flip sign if reversed)
-  const mEqDiff = raw.match(/^=\s*([+-]?\d+)$/);
-  if (mEqDiff) {
-    let k = parseInt(mEqDiff[1], 10);
-    if (!forward) k = -k;
-    const sign = k >= 0 ? "+ " : "- ";
-    return `${left} = ${right} ${sign}${Math.abs(k)}`;
-  }
-
-  // "◊ k"  → left ◊ right ± k (invert op + flip sign if reversed)
-  const mCmp = raw.match(/^([<>]=?|≥|≤)\s*([+-]?\d+)$/);
-  if (mCmp) {
-    let op = mCmp[1];
-    let k = parseInt(mCmp[2], 10);
-    if (!forward) {
-      op = invertOp(op);
-      k = -k;
-    }
-    const sign = k >= 0 ? "+ " : "- ";
-    return `${left} ${op} ${right} ${sign}${Math.abs(k)}`;
-  }
-
-  // plain op
-  return `${left} ${forward ? raw : invertOp(raw)} ${right}`;
-}
 
 function forwardCheck(
   csp: CSP,
@@ -573,7 +543,6 @@ function forwardCheck(
     if (assignment[nb] != null) continue;
 
     const nbDom = domains[nb];
-    const before = nbDom.length;
     const removedVals: string[] = [];
 
     const firstFail = (
@@ -615,8 +584,8 @@ function forwardCheck(
       if (stepThrough) {
         const niceLabel = formatConstraintOriented(
           fail.constraint,
-          fail.other, // LEFT
-          nb // RIGHT
+          fail.other,
+          nb
         );
         const scopeVals = formatScopeValues(fail.constraint, fail.args);
 
@@ -668,7 +637,6 @@ function forwardCheck(
           description: `Forward Checking: domains updated (removed ${eliminatedCount} values) — empty domain at ${nb}`,
           highlight: { variable },
         });
-      } else {
       }
       return { ok: false, removed: pruned };
     }
@@ -721,7 +689,7 @@ function ac3(
   domains: Record<string, string[]>,
   stepThrough: boolean,
   push: (s: CSPStepWithSnapshot) => void,
-  stepsAcc: CSPStepWithSnapshot[],
+  _stepsAcc: CSPStepWithSnapshot[],
   assignment: Record<string, string | null>
 ): { ok: boolean; pruned: Array<{ variable: string; value: string }> } {
   const key = (i: string, j: string) => `${i}|${j}`;
@@ -755,12 +723,12 @@ function ac3(
     }
   };
 
-  // initialiseer met alle binaire bogen
+  // init alle binaire bogen
   for (const c of csp.constraints) {
     if (c.scope.length === 2) {
       const [a, b] = c.scope;
-      enqueueArc(a, b, "");
-      enqueueArc(b, a, "");
+      enqueueArc(a, b);
+      enqueueArc(b, a);
     }
   }
 
@@ -783,13 +751,8 @@ function ac3(
       });
     }
 
-    // Zoek de binaire constraint tussen xi en xj (als die bestaat)
-    const cons = csp.constraints.find(
-      (c) =>
-        c.scope.length === 2 &&
-        ((c.scope[0] === xi && c.scope[1] === xj) ||
-          (c.scope[0] === xj && c.scope[1] === xi))
-    );
+    // binaire constraint tussen xi en xj?
+    const cons = findConstraint(csp, xi, xj);
     if (!cons) continue;
 
     const removed: string[] = [];
@@ -851,23 +814,20 @@ function ac3(
         return { ok: false, pruned: prunedAll };
       }
 
-      // Domein van xi is veranderd: enqueue alle (xk, xi) opnieuw (behalve xj)
+      // domein xi is gewijzigd ⇒ (xk, xi) (behalve xj) terug in de queue
       for (const xk of neighs[xi]) {
         if (xk === xj) continue;
         enqueueArc(xk, xi, `${xi} domain changed`);
       }
-    } else {
-      // Geen verwijderingen, toch revise-stap tonen + queue
-      if (stepThrough) {
-        push({
-          step: { kind: "ac3-revise", arc: [xi, xj], removed: [] },
-          snapshot: snapshotOf(csp, assignment, domains, xi, [], queue),
-          description:
-            `Revise ${opText(csp, xi, xj)} — no removals\n` +
-            `Queue: ${formatQueue(queue)}`,
-          highlight: { edge: [xi, xj], variable: xi, constraintStatus: "ok" },
-        });
-      }
+    } else if (stepThrough) {
+      push({
+        step: { kind: "ac3-revise", arc: [xi, xj], removed: [] },
+        snapshot: snapshotOf(csp, assignment, domains, xi, [], queue),
+        description:
+          `Revise ${opText(csp, xi, xj)} — no removals\n` +
+          `Queue: ${formatQueue(queue)}`,
+        highlight: { edge: [xi, xj], variable: xi, constraintStatus: "ok" },
+      });
     }
   }
 
@@ -877,6 +837,157 @@ function ac3(
     description: "AC-3 finished (consistent)",
   });
   return { ok: true, pruned: prunedAll };
+}
+
+/* ----------------- Unary filtering (pre-pass) ----------------- */
+
+function pruneUnaryConstraintsFirst(
+  csp: CSP,
+  assignment: Record<string, string | null>,
+  domains: Record<string, string[]>,
+  push: (s: CSPStepWithSnapshot) => void
+): { ok: boolean; pruned: Array<{ variable: string; value: string }> } {
+  const pruned: Array<{ variable: string; value: string }> = [];
+
+  push({
+    step: { kind: "unary-filter-start" } as any,
+    snapshot: snapshotOf(csp, assignment, domains, undefined, [], undefined),
+    description: "Check all unary constraints",
+  });
+
+  const unaries = csp.constraints.filter((c) => c.scope.length === 1);
+  for (const c of unaries) {
+    const v = c.scope[0];
+    const dom = domains[v] ?? [];
+
+    if (assignment[v] != null) {
+      const val = assignment[v] as string;
+
+      push({
+        step: {
+          kind: "check-constraint",
+          variable: v,
+          neighbor: v,
+          edge: [v, v],
+          consistent: true,
+        } as any,
+        snapshot: snapshotOf(csp, assignment, domains, v, [], undefined),
+        description: `Check unary ${symbolFor(c)} on ${v} with ${v}=${val}`,
+        highlight: { variable: v, edge: [v, v], constraintStatus: "checking" },
+      });
+
+      const ok = constraintSatisfied(c, val);
+      if (!ok) {
+        push({
+          step: { kind: "failure" } as any,
+          snapshot: snapshotOf(csp, assignment, domains, v, [], undefined),
+          description: `Unary conflict: ${v}=${val} violates ${symbolFor(c)}`,
+          highlight: { variable: v, edge: [v, v], constraintStatus: "fail" },
+        });
+        return { ok: false, pruned };
+      }
+
+      push({
+        step: {
+          kind: "check-constraint",
+          variable: v,
+          neighbor: v,
+          edge: [v, v],
+          consistent: true,
+        } as any,
+        snapshot: snapshotOf(csp, assignment, domains, v, [], undefined),
+        description: `OK: ${v}=${val} satisfies ${symbolFor(c)}`,
+        highlight: { variable: v, edge: [v, v], constraintStatus: "ok" },
+      });
+
+      continue;
+    }
+
+    let i = 0;
+    while (i < dom.length) {
+      const val = dom[i];
+
+      push({
+        step: {
+          kind: "check-constraint",
+          variable: v,
+          neighbor: v,
+          edge: [v, v],
+          consistent: true,
+        } as any,
+        snapshot: snapshotOf(csp, assignment, domains, v, [], undefined),
+        description: `Check unary ${symbolFor(c)} on ${v} with ${v}=${val}`,
+        highlight: { variable: v, edge: [v, v], constraintStatus: "checking" },
+      });
+
+      const ok = constraintSatisfied(c, val);
+      if (!ok) {
+        dom.splice(i, 1);
+        pruned.push({ variable: v, value: val });
+
+        push({
+          step: {
+            kind: "unary-filter-eliminate",
+            variable: v,
+            valueEliminated: val,
+          } as any,
+          snapshot: snapshotOf(
+            csp,
+            assignment,
+            domains,
+            v,
+            [{ variable: v, value: val }],
+            undefined
+          ),
+          description: `Remove ${val} from domain(${v}) due to ${symbolFor(c)}`,
+          highlight: { variable: v, edge: [v, v], constraintStatus: "fail" },
+        });
+      } else {
+        push({
+          step: {
+            kind: "check-constraint",
+            variable: v,
+            neighbor: v,
+            edge: [v, v],
+            consistent: true,
+          } as any,
+          snapshot: snapshotOf(csp, assignment, domains, v, [], undefined),
+          description: `OK: ${v}=${val} satisfies ${symbolFor(c)}`,
+          highlight: { variable: v, edge: [v, v], constraintStatus: "ok" },
+        });
+        i++;
+      }
+    }
+
+    if ((domains[v] ?? []).length === 0) {
+      push({
+        step: { kind: "failure" } as any,
+        snapshot: snapshotOf(csp, assignment, domains, v, [], undefined),
+        description: `Unary filtering produced empty domain for ${v}`,
+        highlight: { variable: v, edge: [v, v], constraintStatus: "fail" },
+      });
+      return { ok: false, pruned };
+    }
+  }
+
+  push({
+    step: { kind: "unary-filter-end" } as any,
+    snapshot: snapshotOf(
+      csp,
+      assignment,
+      domains,
+      undefined,
+      pruned,
+      undefined
+    ),
+    description: pruned.length
+      ? `Unary filtering done — removed: ${pruned
+          .map((p) => `${p.value} from ${p.variable}`)
+          .join(", ")}`
+      : "Unary filtering done — no removals",
+  });
+
+  return { ok: true, pruned };
 }
 
 /* -------------------------- SOLVER -------------------------- */
@@ -892,76 +1003,20 @@ export function solveCSP(
 
   const push = (s: CSPStepWithSnapshot) => steps.push(s);
 
-  // helper: render één constraint georiënteerd (voor check-steps)
-  const formatConstraintOriented = (
-    c: Constraint,
-    left: string,
-    right: string
-  ) => {
-    if (c.scope.length === 1) return `${left} ${symbolFor(c)}`;
-
-    const raw = (c.label ?? symbolFor(c)).trim();
-    const forward = c.scope[0] === left && c.scope[1] === right;
-
-    const invert = (op: string) =>
-      op === ">"
-        ? "<"
-        : op === "<"
-        ? ">"
-        : op === "≥" || op === ">="
-        ? "≤"
-        : op === "≤" || op === "<="
-        ? "≥"
-        : op;
-
-    const mEq = raw.match(/^=\s*([+-]?\d+)$/);
-    if (mEq) {
-      let k = parseInt(mEq[1], 10);
-      if (!forward) k = -k;
-      const sign = k >= 0 ? "+ " : "- ";
-      return `${left} = ${right} ${sign}${Math.abs(k)}`;
+  if (options.algorithm === "BT_FC" || options.algorithm === "BT_AC3") {
+    const uf = pruneUnaryConstraintsFirst(
+      csp,
+      initialAssignment,
+      initialDomains,
+      push
+    );
+    if (!uf.ok) {
+      // inconsistent door unary
+      return { steps };
     }
-
-    const mCmp = raw.match(/^([<>]=?|≥|≤)\s*([+-]?\d+)$/);
-    if (mCmp) {
-      let op = mCmp[1];
-      let k = parseInt(mCmp[2], 10);
-      if (!forward) {
-        op = invert(op);
-        k = -k;
-      }
-      const sign = k >= 0 ? "+ " : "- ";
-      return `${left} ${op} ${right} ${sign}${Math.abs(k)}`;
-    }
-
-    const mAbs = raw.match(/^\|.*\|\s*(≥|<=|>=|≤|<|>)\s*([+-]?\d+)$/);
-    if (mAbs) {
-      const op = mAbs[1] === ">=" ? "≥" : mAbs[1] === "<=" ? "≤" : mAbs[1];
-      const k = parseInt(mAbs[2], 10);
-      return `|${left} - ${right}| ${op} ${k}`;
-    }
-
-    return `${left} ${forward ? raw : invert(raw)} ${right}`;
-  };
-  function mrvScores(
-    csp: CSP,
-    domains: Record<string, string[]>,
-    assignment: Record<string, string | null>
-  ) {
-    const neigh = neighborsMap(csp);
-    const unassigned = csp.variables.filter((v) => assignment[v] == null);
-
-    return unassigned.map((v) => {
-      const dom = domains[v] ?? [];
-      const deg = (neigh[v] ?? []).filter((n) => assignment[n] == null).length;
-      return {
-        variable: v,
-        domainSize: dom.length,
-        domain: [...dom],
-        degreeUnassigned: deg,
-      };
-    });
   }
+
+  const doRedundantChecks = options.algorithm === "BT"; // alleen BT doet 'try' + constraint-by-constraint checks
 
   function backtrack(
     assignment: Record<string, string | null>,
@@ -979,20 +1034,18 @@ export function solveCSP(
       );
       return true;
     }
-    // --- MRV uitleg + selectie ---
+
+    // --- MRV uitleg + selectie (of alpha) ---
     let variable: string;
 
     if (options.variableOrdering === "mrv") {
-      const scores = mrvScores(csp, domains, assignment);
-
-      // sorteer alleen voor weergave: kleinste domein, dan hoogste degree, dan alfabetisch
+      const scores = mrvScoresExplain(csp, domains, assignment);
       const shown = [...scores].sort(
         (a, b) =>
           a.domainSize - b.domainSize ||
           b.degreeUnassigned - a.degreeUnassigned ||
           (a.variable < b.variable ? -1 : 1)
       );
-
       const minDom = Math.min(...scores.map((s) => s.domainSize));
       const mrvCandidates = scores.filter((s) => s.domainSize === minDom);
 
@@ -1006,7 +1059,6 @@ export function solveCSP(
         );
       }
 
-      // tie-breaker op degree
       let pick: string;
       let degreeNote = "";
       let alphaNote = "";
@@ -1035,7 +1087,6 @@ export function solveCSP(
 
       lines.push(`\n→ Pick ${pick} (min |D|)${degreeNote}${alphaNote}`);
 
-      // uitleg-stap (zoals bij LCV) + highlight
       pushStep(
         steps,
         csp,
@@ -1048,12 +1099,11 @@ export function solveCSP(
 
       variable = pick;
     } else {
-      // bestaande alpha-variant
-      const unassigned = csp.variables.filter((v) => assignment[v] == null);
-      variable = [...unassigned].sort()[0];
+      const u = csp.variables.filter((v) => assignment[v] == null);
+      variable = [...u].sort()[0];
     }
 
-    // normale selectiestap (blijven doen, zodat UI consistent is)
+    // “Select variable …”
     pushStep(
       steps,
       csp,
@@ -1064,20 +1114,9 @@ export function solveCSP(
       { variable }
     );
 
-    pushStep(
-      steps,
-      csp,
-      { kind: "select-variable", variable },
-      assignment,
-      domains,
-      `Select variable ${variable}`,
-      { variable }
-    );
-
-    /* -------- LCV uitleg (1 stap per waarde + samenvatting) -------- */
+    // --- Value ordering explanation ---
     if (options.valueOrdering === "lcv") {
       const scores = lcvScores(csp, variable, domains, assignment);
-
       for (const s of scores) {
         const lines: string[] = [];
         lines.push(`LCV calculation for ${variable} = ${s.value}`);
@@ -1109,7 +1148,6 @@ export function solveCSP(
           { variable }
         );
       }
-
       const summary: string[] = [`LCV summary for ${variable}:`];
       for (const s of scores) {
         summary.push(
@@ -1125,7 +1163,6 @@ export function solveCSP(
         summary.join("\n"),
         { variable }
       );
-
       const orderedValuesLCV = orderValues(
         csp,
         variable,
@@ -1168,168 +1205,184 @@ export function solveCSP(
       options
     );
 
-    /* ----------------- Try values + checks ----------------- */
+    /* ----------------- Try/Assign path -----------------
+       - BT: ‘try’ + constraint-by-constraint checks (zoals vroeger)
+       - BT_FC / BT_AC3: GEEN extra checks/‘try’ => direct Assign + propagate
+    ----------------------------------------------------- */
 
     for (const value of orderedValues) {
-      // try-value (highlight try in DomainTable)
-      pushStep(
-        steps,
-        csp,
-        { kind: "try-value", variable, value },
-        assignment,
-        domains,
-        `Try ${variable} = ${value}`,
-        { variable, tryingValue: value }
-      );
+      if (doRedundantChecks) {
+        // ====== BT pad (oude, gedetailleerde uitleg) ======
+        pushStep(
+          steps,
+          csp,
+          { kind: "try-value", variable, value },
+          assignment,
+          domains,
+          `Try ${variable} = ${value}`,
+          { variable, tryingValue: value }
+        );
 
-      let consistent = true;
+        let consistent = true;
 
-      // 1) Unary constraints: checking -> result (status kleurt edge/node)
-      for (const c of csp.constraints) {
-        if (c.scope.length === 1 && c.scope[0] === variable) {
-          const ok = constraintSatisfied(c, value);
+        // 1) Unary constraints on variable
+        for (const c of csp.constraints) {
+          if (c.scope.length === 1 && c.scope[0] === variable) {
+            const ok = constraintSatisfied(c, value);
+            pushStep(
+              steps,
+              csp,
+              {
+                kind: "check-constraint",
+                variable,
+                neighbor: variable,
+                edge: [variable, variable],
+                consistent: ok,
+              },
+              assignment,
+              domains,
+              `Check unary constraint ${symbolFor(c)} on ${variable}: ${
+                ok ? "OK" : "Conflict"
+              }`,
+              {
+                variable,
+                edge: [variable, variable],
+                constraintStatus: ok ? "ok" : "fail",
+                tryingValue: value,
+              }
+            );
+            if (!ok) {
+              consistent = false;
+              break;
+            }
+          }
+        }
+        if (!consistent) continue;
+
+        // 2) Binary/n-ary constraints that can be fully evaluated
+        for (const c of csp.constraints) {
+          if (!c.scope.includes(variable) || c.scope.length < 2) continue;
+
+          const values: Record<string, string> = { [variable]: value };
+          let ready = true;
+          for (const v of c.scope) {
+            if (v === variable) continue;
+            const val = assignment[v];
+            if (val == null) {
+              ready = false;
+              break;
+            }
+            values[v] = val;
+          }
+
+          const neighbor = c.scope.find((v) => v !== variable)!;
+
+          if (!ready) continue;
+
+          const text = formatConstraintOriented(c, variable, neighbor);
           pushStep(
             steps,
             csp,
             {
               kind: "check-constraint",
               variable,
-              neighbor: variable,
-              edge: [variable, variable],
+              neighbor,
+              edge: [variable, neighbor],
+              consistent: true,
+            },
+            assignment,
+            domains,
+            `Checking ${text}...`,
+            {
+              edge: [variable, neighbor],
+              variable,
+              constraintStatus: "checking",
+              tryingValue: value,
+            }
+          );
+
+          const args = c.scope.map((v) => values[v]);
+          const ok = constraintSatisfied(c, ...args);
+
+          pushStep(
+            steps,
+            csp,
+            {
+              kind: "check-constraint",
+              variable,
+              neighbor,
+              edge: [variable, neighbor],
               consistent: ok,
             },
             assignment,
             domains,
-            `Check unary constraint ${symbolFor(c)} on ${variable}: ${
-              ok ? "OK" : "Conflict"
-            }`,
+            `Check ${text}: ${ok ? "OK" : "Conflict"}`,
             {
+              edge: [variable, neighbor],
               variable,
-              edge: [variable, variable],
-              constraintStatus: ok ? "ok" : "fail", // ✅ labelkleur
+              constraintStatus: ok ? "ok" : "fail",
               tryingValue: value,
             }
           );
+
           if (!ok) {
             consistent = false;
             break;
           }
         }
-      }
-      if (!consistent) continue;
+        if (!consistent) continue;
 
-      // 2) Binary/n-ary constraints: checking -> result (per constraint)
-      for (const c of csp.constraints) {
-        if (!c.scope.includes(variable) || c.scope.length < 2) continue;
-
-        const values: Record<string, string> = { [variable]: value };
-        let ready = true;
-        for (const v of c.scope) {
-          if (v === variable) continue;
-          const val = assignment[v];
-          if (val == null) {
-            ready = false;
-            break;
-          }
-          values[v] = val;
-        }
-
-        const neighbor = c.scope.find((v) => v !== variable)!;
-
-        if (!ready) {
+        // extra guard (met naam van constraint)
+        const ic = isConsistent(variable, value, assignment, csp);
+        if (ic.ok !== true) {
+          const c = ic.constraint;
+          const msg = `Not consistent with constraint ${formatConstraint(
+            c
+          )} for (${formatScopeValues(c, ic.args)})`;
+          pushStep(
+            steps,
+            csp,
+            { kind: "backtrack", variable },
+            assignment,
+            domains,
+            msg,
+            { variable }
+          );
           continue;
         }
 
-        // checking (oranje)
-        const text = formatConstraintOriented(c, variable, neighbor);
+        // Assign (BT)
+        assignment[variable] = value;
         pushStep(
           steps,
           csp,
-          {
-            kind: "check-constraint",
-            variable,
-            neighbor,
-            edge: [variable, neighbor],
-            consistent: true,
-          },
+          { kind: "assign", variable, value },
           assignment,
           domains,
-          `Checking ${text}...`,
-          {
-            edge: [variable, neighbor],
-            variable,
-            constraintStatus: "checking",
-            tryingValue: value,
-          }
-        );
-
-        // result
-        const args = c.scope.map((v) => values[v]);
-        const ok = constraintSatisfied(c, ...args);
-
-        pushStep(
-          steps,
-          csp,
-          {
-            kind: "check-constraint",
-            variable,
-            neighbor,
-            edge: [variable, neighbor],
-            consistent: ok,
-          },
-          assignment,
-          domains,
-          `Check ${text}: ${ok ? "OK" : "Conflict"}`,
-          {
-            edge: [variable, neighbor],
-            variable,
-            constraintStatus: ok ? "ok" : "fail",
-            tryingValue: value,
-          }
-        );
-
-        if (!ok) {
-          consistent = false;
-          break;
-        }
-      }
-      if (!consistent) continue;
-
-      // extra guard (met naam van constraint)
-      const ic = isConsistent(variable, value, assignment, csp);
-      if (ic.ok !== true) {
-        const c = ic.constraint;
-        const msg = `Not consistent with constraint ${formatConstraint(
-          c
-        )} for (${formatScopeValues(c, ic.args)})`;
-        pushStep(
-          steps,
-          csp,
-          { kind: "backtrack", variable },
-          assignment,
-          domains,
-          msg,
+          `Assign: ${variable} = ${value}`,
           { variable }
         );
-        continue;
+      } else {
+        // ====== BT_FC / BT_AC3 pad (géén extra checks; direct assign) ======
+        assignment[variable] = value;
+        pushStep(
+          steps,
+          csp,
+          { kind: "assign", variable, value },
+          assignment,
+          domains,
+          `Assign: ${variable} = ${value}`,
+          { variable }
+        );
       }
 
-      // Assign
-      assignment[variable] = value;
-      pushStep(
-        steps,
-        csp,
-        { kind: "assign", variable, value },
-        assignment,
-        domains,
-        `Assign: ${variable} = ${value}`,
-        { variable }
-      );
+      // Gemeenschappelijk: domains snapshot bewaren
       const savedDomains = deepCloneDomains(domains);
 
+      // Lock singletons voor alle toegewezen variabelen
       lockAssignedDomains(domains, assignment);
 
-      // Propagation
+      // Propagation (alleen BT_FC of BT_AC3; bij BT alleen als user die modes kiest)
       let propagationOK = true;
       if (options.algorithm === "BT_FC") {
         const res = forwardCheck(
