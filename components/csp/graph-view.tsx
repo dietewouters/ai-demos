@@ -15,7 +15,7 @@ type Props = {
     edge?: [string, string];
     neighbor?: string;
     tryingValue?: string | null;
-    constraintStatus?: "checking" | "ok" | "fail";
+    constraintStatus?: "enqueue" | "dequeue" | "checking" | "ok" | "fail";
   } | null;
 };
 
@@ -136,11 +136,12 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
   }
   const edges = Array.from(edgeMap.values());
 
-  const getStrokeColor = (isHL: boolean) => {
+  const getStrokeColor = (isHL: boolean, status?: string) => {
     if (!isHL) return "#d1d5db";
-    if (status === "ok") return "#22c55e";
-    if (status === "fail") return "#ef4444";
-    return "#f59e0b";
+    if (status === "enqueue") return "#a855f7"; // purple
+    if (status === "ok") return "#22c55e"; // green
+    if (status === "fail") return "#ef4444"; // red
+    return "#f59e0b"; // checking / default highlight
   };
 
   return (
@@ -167,7 +168,7 @@ export default function GraphView({ csp, snapshot, highlight }: Props) {
               y1={posA.y}
               x2={posB.x}
               y2={posB.y}
-              stroke={getStrokeColor(!!isHL)}
+              stroke={getStrokeColor(!!isHL, status)}
               strokeWidth={isHL ? 4 : 2}
             />
           );

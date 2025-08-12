@@ -58,41 +58,28 @@ function findConstraint(
         (c.scope[0] === b && c.scope[1] === a))
   );
 }
+function lockAssignedDomains(
+  domains: Record<string, string[]>,
+  assignment: Record<string, string | null>
+) {
+  for (const v in assignment) {
+    const val = assignment[v];
+    if (val != null) {
+      // Vervang volledige domein door enkel de toegewezen waarde
+      domains[v] = [val];
+    }
+  }
+}
 
 function opText(csp: CSP, from: string, to: string): string {
-  const cons = findConstraint(csp, from, to);
+  const cons = csp.constraints.find(
+    (c) =>
+      c.scope.length === 2 &&
+      ((c.scope[0] === from && c.scope[1] === to) ||
+        (c.scope[0] === to && c.scope[1] === from))
+  );
   if (!cons) return `${from} ? ${to}`;
-  let sym = symbolFor(cons);
-
-  const forward = cons.scope[0] === from && cons.scope[1] === to;
-  if (!forward) {
-    const mEq = sym.match(/^=\s*([+-]?\d+(?:\.\d+)?)$/);
-    const mCmp = sym.match(/^([<>]=?)\s*([+-]?\d+(?:\.\d+)?)$/);
-    const mAbs = sym.match(
-      /^\|([A-Za-z])\s*-\s*([A-Za-z])\|\s*([<>]=?)\s*([+-]?\d+(?:\.\d+)?)$/
-    );
-
-    if (mEq) {
-      let k = parseFloat(mEq[1]);
-      return `${to} = ${from} ${k >= 0 ? "-" : "+"} ${Math.abs(k)}`;
-    }
-    if (mCmp) {
-      let op = mCmp[1];
-      let k = parseFloat(mCmp[2]);
-      op = invertSymbol(op);
-      return `${to} ${op} ${from} ${k >= 0 ? "-" : "+"} ${Math.abs(k)}`;
-    }
-    if (mAbs) {
-      const op = mAbs[3];
-      const k = mAbs[4];
-      return `|${to} - ${from}| ${op} ${k}`;
-    }
-
-    sym = invertSymbol(sym);
-    return `${to} ${sym} ${from}`;
-  }
-
-  return `${from} ${sym} ${to}`;
+  return formatConstraintOriented(cons, from, to);
 }
 
 function callPredicate(c: Constraint, args: string[]): boolean {
@@ -465,6 +452,92 @@ function mrvScores(
 }
 
 /* ----------------- Forward Checking / AC-3 ----------------- */
+function firstFailingConstraint(
+  csp: CSP,
+  variableY: string,
+  y: string,
+  assignmentPlus: Record<string, string | null>
+): { constraint: Constraint; args: string[] } | null {
+  for (const c of csp.constraints) {
+    if (!c.scope.includes(variableY)) continue;
+
+    const values: Record<string, string> = { [variableY]: y };
+    let ready = true;
+    for (const v of c.scope) {
+      if (v === variableY) continue;
+      const vv = assignmentPlus[v];
+      if (vv == null) {
+        ready = false;
+        break;
+      }
+      values[v] = vv;
+    }
+    if (!ready) continue;
+
+    const args = c.scope.map((v) => values[v]);
+    if (!constraintSatisfied(c, ...args)) {
+      return { constraint: c, args };
+    }
+  }
+  return null;
+}
+function invertOp(op: string): string {
+  if (op === ">") return "<";
+  if (op === "<") return ">";
+  if (op === "≥" || op === ">=") return "≤";
+  if (op === "≤" || op === "<=") return "≥";
+  return op;
+}
+
+function formatConstraintOriented(
+  c: Constraint,
+  left: string,
+  right: string
+): string {
+  const raw = (
+    c.label ?? (c.type === "neq" ? "≠" : c.type === "eq" ? "=" : "⋆")
+  ).trim();
+
+  // Unary
+  if (c.scope.length === 1) return `${left} ${raw}`;
+
+  const forward = c.scope[0] === left && c.scope[1] === right;
+
+  // |X - Y| ◊ k
+  const mAbs = raw.match(
+    /^\|\s*[A-Za-z]+\s*-\s*[A-Za-z]+\s*\|\s*(≥|<=|>=|≤|<|>)\s*([+-]?\d+)$/
+  );
+  if (mAbs) {
+    const op = mAbs[1] === ">=" ? "≥" : mAbs[1] === "<=" ? "≤" : mAbs[1];
+    const k = parseInt(mAbs[2], 10);
+    return `|${left} - ${right}| ${op} ${k}`;
+  }
+
+  // "= k"  → left = right ± k  (flip sign if reversed)
+  const mEqDiff = raw.match(/^=\s*([+-]?\d+)$/);
+  if (mEqDiff) {
+    let k = parseInt(mEqDiff[1], 10);
+    if (!forward) k = -k;
+    const sign = k >= 0 ? "+ " : "- ";
+    return `${left} = ${right} ${sign}${Math.abs(k)}`;
+  }
+
+  // "◊ k"  → left ◊ right ± k (invert op + flip sign if reversed)
+  const mCmp = raw.match(/^([<>]=?|≥|≤)\s*([+-]?\d+)$/);
+  if (mCmp) {
+    let op = mCmp[1];
+    let k = parseInt(mCmp[2], 10);
+    if (!forward) {
+      op = invertOp(op);
+      k = -k;
+    }
+    const sign = k >= 0 ? "+ " : "- ";
+    return `${left} ${op} ${right} ${sign}${Math.abs(k)}`;
+  }
+
+  // plain op
+  return `${left} ${forward ? raw : invertOp(raw)} ${right}`;
+}
 
 function forwardCheck(
   csp: CSP,
@@ -493,6 +566,8 @@ function forwardCheck(
     [variable]: value,
   };
 
+  const removedByVar: Record<string, string[]> = {};
+
   for (const nb of csp.variables) {
     if (nb === variable) continue;
     if (assignment[nb] != null) continue;
@@ -501,37 +576,81 @@ function forwardCheck(
     const before = nbDom.length;
     const removedVals: string[] = [];
 
+    const firstFail = (
+      nbVal: string
+    ): { constraint: Constraint; args: string[]; other: string } | null => {
+      for (const c of csp.constraints) {
+        if (!c.scope.includes(nb)) continue;
+
+        const values: Record<string, string> = { [nb]: nbVal };
+        let ready = true;
+        for (const v of c.scope) {
+          if (v === nb) continue;
+          const vv = v === variable ? value : (augmented[v] as string | null);
+          if (vv == null) {
+            ready = false;
+            break;
+          }
+          values[v] = vv;
+        }
+        if (!ready) continue;
+
+        const args = c.scope.map((v) => values[v]);
+        if (!constraintSatisfied(c, ...args)) {
+          const other = c.scope.find((s) => s !== nb) ?? nb;
+          return { constraint: c, args, other };
+        }
+      }
+      return null;
+    };
+
     domains[nb] = nbDom.filter((v) => {
-      const ok = canKeepValue(csp, nb, v, augmented);
-      if (!ok) removedVals.push(v);
-      return ok;
-    });
+      const fail = firstFail(v);
+      if (!fail) return true;
 
-    eliminatedCount += before - domains[nb].length;
+      removedVals.push(v);
+      eliminatedCount++;
+      pruned.push({ variable: nb, value: v });
 
-    for (const rv of removedVals) {
-      pruned.push({ variable: nb, value: rv });
       if (stepThrough) {
+        const niceLabel = formatConstraintOriented(
+          fail.constraint,
+          fail.other, // LEFT
+          nb // RIGHT
+        );
+        const scopeVals = formatScopeValues(fail.constraint, fail.args);
+
         push({
           step: {
             kind: "forward-check-eliminate",
             from: variable,
             to: nb,
-            valueEliminated: rv,
-            reason: "Constraint",
+            valueEliminated: v,
+            reason: niceLabel,
           },
           snapshot: snapshotOf(
             csp,
             assignment,
             domains,
             nb,
-            [{ variable: nb, value: rv }],
+            [{ variable: nb, value: v }],
             undefined
           ),
-          description: `FC: delete ${rv} from domain of(${nb}) due to constraints of ${nb}`,
-          highlight: { variable: nb },
+          description: `FC: remove ${v} from domain(${nb}) because ${niceLabel} for (${scopeVals})`,
+          highlight: {
+            edge:
+              fail.constraint.scope.length === 1 ? [nb, nb] : [fail.other, nb],
+            variable: nb,
+            constraintStatus: "fail",
+          },
         });
       }
+
+      return false;
+    });
+
+    if (!stepThrough && removedVals.length) {
+      removedByVar[nb] = removedVals.slice();
     }
 
     if (domains[nb].length === 0) {
@@ -546,23 +665,53 @@ function forwardCheck(
             pruned,
             undefined
           ),
-          description: `FC terminated: ${eliminatedCount} values deleted (empty domain)`,
+          description: `Forward Checking: domains updated (removed ${eliminatedCount} values) — empty domain at ${nb}`,
           highlight: { variable },
         });
+      } else {
       }
       return { ok: false, removed: pruned };
     }
   }
 
-  // afsluiten
-  push({
-    step: { kind: "forward-check-end", eliminatedCount },
-    snapshot: snapshotOf(csp, assignment, domains, variable, pruned, undefined),
-    description: stepThrough
-      ? `FC completed`
-      : `FC terminated: ${eliminatedCount} values deleted`,
-    highlight: { variable },
-  });
+  if (stepThrough) {
+    push({
+      step: { kind: "forward-check-end", eliminatedCount },
+      snapshot: snapshotOf(
+        csp,
+        assignment,
+        domains,
+        variable,
+        pruned,
+        undefined
+      ),
+      description: `FC completed: removed ${eliminatedCount} value${
+        eliminatedCount === 1 ? "" : "s"
+      }`,
+      highlight: { variable },
+    });
+  } else {
+    const parts: string[] = [];
+    for (const v in removedByVar) {
+      parts.push(`${v}: −{${removedByVar[v].join(", ")}}`);
+    }
+    push({
+      step: { kind: "forward-check-end", eliminatedCount },
+      snapshot: snapshotOf(
+        csp,
+        assignment,
+        domains,
+        variable,
+        pruned,
+        undefined
+      ),
+      description:
+        `Forward Checking: domains updated (removed ${eliminatedCount} value` +
+        `${eliminatedCount === 1 ? "" : "s"})` +
+        (parts.length ? `\n  ${parts.join("  •  ")}` : ""),
+      highlight: { variable },
+    });
+  }
 
   return { ok: true, removed: pruned };
 }
@@ -575,63 +724,78 @@ function ac3(
   stepsAcc: CSPStepWithSnapshot[],
   assignment: Record<string, string | null>
 ): { ok: boolean; pruned: Array<{ variable: string; value: string }> } {
-  const arcs: Array<[string, string]> = [];
-  for (const c of csp.constraints) {
-    if (c.scope.length !== 2) continue;
-    const [a, b] = c.scope;
-    arcs.push([a, b]);
-    arcs.push([b, a]);
-  }
+  const key = (i: string, j: string) => `${i}|${j}`;
+  const formatQueue = (q: Array<[string, string]>) =>
+    q.length ? q.map(([i, j]) => `${i}→${j}`).join(", ") : "∅";
 
-  const queue: Array<[string, string]> = [...arcs];
+  const queue: Array<[string, string]> = [];
+  const inQueue = new Set<string>();
+  const neighs = neighborsMap(csp);
   const prunedAll: Array<{ variable: string; value: string }> = [];
 
-  if (stepThrough) {
-    push({
-      step: { kind: "ac3-start" },
-      snapshot: snapshotOf(csp, assignment, domains, undefined, [], queue),
-      description: "AC-3 started",
-    });
-    for (const arc of queue) {
+  const enqueueArc = (i: string, j: string, reason?: string) => {
+    const k = key(i, j);
+    const already = inQueue.has(k);
+    if (!already) {
+      inQueue.add(k);
+      queue.push([i, j]);
+    }
+    if (stepThrough) {
       push({
-        step: { kind: "ac3-enqueue", arc },
+        step: { kind: "ac3-enqueue", arc: [i, j] },
         snapshot: snapshotOf(csp, assignment, domains, undefined, [], queue),
-        description: `AC-3: in queue ${opText(csp, arc[0], arc[1])}`,
-        highlight: { edge: arc },
+        description:
+          (already
+            ? `Enqueue ${opText(csp, i, j)} (already in queue)`
+            : `Enqueue ${opText(csp, i, j)}`) +
+          (reason ? ` — because ${reason}` : "") +
+          `\nQueue: ${formatQueue(queue)}`,
+        highlight: { edge: [i, j], constraintStatus: "enqueue" },
       });
     }
-  } else {
-    push({
-      step: { kind: "ac3-start" },
-      snapshot: snapshotOf(csp, assignment, domains, undefined, [], queue),
-      description: "AC-3 started",
-    });
+  };
+
+  // initialiseer met alle binaire bogen
+  for (const c of csp.constraints) {
+    if (c.scope.length === 2) {
+      const [a, b] = c.scope;
+      enqueueArc(a, b, "");
+      enqueueArc(b, a, "");
+    }
   }
 
-  const neighs = neighborsMap(csp);
-  const findConstraintLocal = (xi: string, xj: string) =>
-    csp.constraints.find(
+  while (queue.length) {
+    // Dequeue
+    const [xi, xj] = queue.shift()!;
+    inQueue.delete(key(xi, xj));
+    if (stepThrough) {
+      push({
+        step: { kind: "ac3-dequeue", arc: [xi, xj] },
+        snapshot: snapshotOf(csp, assignment, domains, xi, [], queue),
+        description: `Dequeue ${opText(csp, xi, xj)}\nQueue: ${formatQueue(
+          queue
+        )}`,
+        highlight: {
+          edge: [xi, xj],
+          variable: xi,
+          constraintStatus: "dequeue",
+        },
+      });
+    }
+
+    // Zoek de binaire constraint tussen xi en xj (als die bestaat)
+    const cons = csp.constraints.find(
       (c) =>
         c.scope.length === 2 &&
         ((c.scope[0] === xi && c.scope[1] === xj) ||
-          (c.scope[1] === xi && c.scope[0] === xj))
+          (c.scope[0] === xj && c.scope[1] === xi))
     );
-
-  while (queue.length > 0) {
-    const arc = queue.shift()!;
-    const [xi, xj] = arc;
-    if (stepThrough) {
-      push({
-        step: { kind: "ac3-dequeue", arc },
-        snapshot: snapshotOf(csp, assignment, domains, xi, [], queue),
-        description: `AC-3: process ${opText(csp, xi, xj)}`,
-        highlight: { edge: arc, variable: xi },
-      });
-    }
-    const cons = findConstraintLocal(xi, xj);
     if (!cons) continue;
+
     const removed: string[] = [];
     const di = domains[xi];
+
+    // Revise(xi, xj)
     for (let k = di.length - 1; k >= 0; k--) {
       const vi = di[k];
       let supported = false;
@@ -653,10 +817,11 @@ function ac3(
         prunedAll.push({ variable: xi, value: vi });
       }
     }
+
     if (removed.length > 0) {
       if (stepThrough) {
         push({
-          step: { kind: "ac3-revise", arc, removed },
+          step: { kind: "ac3-revise", arc: [xi, xj], removed },
           snapshot: snapshotOf(
             csp,
             assignment,
@@ -665,56 +830,51 @@ function ac3(
             removed.map((v) => ({ variable: xi, value: v })),
             queue
           ),
-          description: `AC-3: revise ${opText(
-            csp,
-            xi,
-            xj
-          )} — deleted: ${removed.join(", ")}`,
-          highlight: { edge: arc, variable: xi },
+          description:
+            `Revise ${opText(csp, xi, xj)} — removed: ${removed.join(", ")}\n` +
+            `Queue: ${formatQueue(queue)}`,
+          highlight: {
+            edge: [xi, xj],
+            variable: xi,
+            constraintStatus: "checking",
+          },
         });
       }
+
       if (domains[xi].length === 0) {
         push({
           step: { kind: "ac3-end", result: "inconsistent" },
-          snapshot: snapshotOf(
-            csp,
-            assignment,
-            domains,
-            xi,
-            removed.map((v) => ({ variable: xi, value: v })),
-            queue
-          ),
-          description: "AC-3 terminated: inconsistent (empty domain)",
-          highlight: { variable: xi },
+          snapshot: snapshotOf(csp, assignment, domains, xi, [], queue),
+          description: `AC-3: empty domain at ${xi}`,
+          highlight: { variable: xi, constraintStatus: "fail" },
         });
         return { ok: false, pruned: prunedAll };
       }
+
+      // Domein van xi is veranderd: enqueue alle (xk, xi) opnieuw (behalve xj)
       for (const xk of neighs[xi]) {
         if (xk === xj) continue;
-        queue.push([xk, xi]);
-        if (stepThrough) {
-          push({
-            step: { kind: "ac3-enqueue", arc: [xk, xi] },
-            snapshot: snapshotOf(csp, assignment, domains, xi, [], queue),
-            description: `AC-3: in queue ${opText(csp, xk, xi)}`,
-            highlight: { edge: [xk, xi], variable: xi },
-          });
-        }
+        enqueueArc(xk, xi, `${xi} domain changed`);
       }
-    } else if (stepThrough) {
-      push({
-        step: { kind: "ac3-revise", arc, removed },
-        snapshot: snapshotOf(csp, assignment, domains, xi, [], queue),
-        description: `AC-3: revise ${opText(csp, xi, xj)} — no deletions`,
-        highlight: { edge: arc, variable: xi },
-      });
+    } else {
+      // Geen verwijderingen, toch revise-stap tonen + queue
+      if (stepThrough) {
+        push({
+          step: { kind: "ac3-revise", arc: [xi, xj], removed: [] },
+          snapshot: snapshotOf(csp, assignment, domains, xi, [], queue),
+          description:
+            `Revise ${opText(csp, xi, xj)} — no removals\n` +
+            `Queue: ${formatQueue(queue)}`,
+          highlight: { edge: [xi, xj], variable: xi, constraintStatus: "ok" },
+        });
+      }
     }
   }
 
   push({
     step: { kind: "ac3-end", result: "consistent" },
     snapshot: snapshotOf(csp, assignment, domains, undefined, prunedAll, []),
-    description: "AC-3 terminated (consistent)",
+    description: "AC-3 finished (consistent)",
   });
   return { ok: true, pruned: prunedAll };
 }
@@ -842,7 +1002,7 @@ export function solveCSP(
         lines.push(
           `  • ${s.variable}: |D| = ${s.domainSize} (${s.domain.join(
             ", "
-          )}) AND unassigned neighbors=${s.degreeUnassigned}`
+          )}) AND unassigned neighbors = ${s.degreeUnassigned}`
         );
       }
 
@@ -1165,9 +1325,9 @@ export function solveCSP(
         `Assign: ${variable} = ${value}`,
         { variable }
       );
-
-      // Save domains snapshot for backtrack
       const savedDomains = deepCloneDomains(domains);
+
+      lockAssignedDomains(domains, assignment);
 
       // Propagation
       let propagationOK = true;

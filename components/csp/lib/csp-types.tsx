@@ -90,7 +90,7 @@ export type CSPStepWithSnapshot = {
     edge?: [string, string];
     neighbor?: string;
     tryingValue?: string | null;
-    constraintStatus?: "checking" | "ok" | "fail";
+    constraintStatus?: "checking" | "ok" | "fail" | "dequeue" | "enqueue";
   };
   kind?: "success" | "normal" | "failure";
 };

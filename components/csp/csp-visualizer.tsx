@@ -280,7 +280,7 @@ export default function CSPVisualizer() {
                 </Tooltip>
               </div>
 
-              <div className="text-sm">
+              <div className="whitespace-pre-wrap font-mono leading-5 text-sm">
                 {idx >= 0 && steps[idx] ? (
                   <>
                     <div className="font-medium text-foreground"></div>
