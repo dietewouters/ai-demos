@@ -26,8 +26,20 @@ const links = [
     ],
   },
 
-  { name: "Propositional Logic", href: "/mainpage/propositionallogic" },
-  { name: "First Order Logic", href: "/mainpage/firstorderlogic" },
+  {
+    name: "First Order Logic",
+    href: "/mainpage/firstorderlogic",
+    children: [
+      {
+        name: "Most General Unifier",
+        href: "/mainpage/firstorderlogic/unification",
+      },
+      {
+        name: "Implicative Normal Form",
+        href: "/mainpage/firstorderlogic/implicative",
+      },
+    ],
+  },
   { name: "Probability", href: "/mainpage/probability" },
   {
     name: "LLMs",
