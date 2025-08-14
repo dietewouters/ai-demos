@@ -11,10 +11,7 @@ const links = [
   {
     name: "Search",
     href: "/mainpage/search",
-    children: [
-      { name: "Search", href: "/mainpage/search/session1" },
-      { name: "Advanced Search & Games", href: "/mainpage/search/session2" },
-    ],
+    children: [{ name: "General", href: "/mainpage/search/session2" }],
   },
   {
     name: "CSP",

@@ -27,7 +27,7 @@ import type { Graph } from "./search";
 // Graph data structures
 export const graphs: Record<string, Graph> = {
   tree: {
-    name: "Problem 1: Breadth-First?",
+    name: "Session 1: Problem 1: Breadth-First?",
     nodes: [
       { id: "S", x: 50, y: 150 },
       { id: "A", x: 50, y: 50 },
@@ -92,7 +92,7 @@ export const graphs: Record<string, Graph> = {
     ],
   },
   network: {
-    name: "Session 2: ex. 1.1",
+    name: "Session 2: Ex. 1.1",
     nodes: [
       { id: "S", x: 25, y: 150 },
       { id: "A", x: 150, y: 50 },
@@ -130,7 +130,7 @@ export const graphs: Record<string, Graph> = {
     ],
   },
   ex2: {
-    name: "Session 2: ex. 1.2",
+    name: "Session 2: Ex. 1.2",
     nodes: [
       { id: "S", x: 200, y: 50 },
       { id: "C", x: 50, y: 50 },
@@ -160,7 +160,7 @@ export const graphs: Record<string, Graph> = {
     ],
   },
   exa: {
-    name: "First example on A* Search",
+    name: "Session 2: First example on A* Search",
     nodes: [
       { id: "S", x: 150, y: 100 },
       { id: "A", x: 50, y: 200 },
@@ -187,7 +187,7 @@ export const graphs: Record<string, Graph> = {
     ],
   },
   ex31: {
-    name: "Exercise path finding",
+    name: "Session 1: Exercise path finding",
     nodes: [
       // Alle geldige vakjes behalve obstakels (zwart)
       { id: "0_0", x: 0, y: 0 },
