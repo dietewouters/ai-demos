@@ -499,7 +499,14 @@ export default function UnificationDemo() {
           )}
         </div>
       )}
-
+      <Alert className="border-blue-200 bg-blue-50">
+        <AlertDescription className="text-blue-800">
+          <strong>Notation:</strong> Lowercase letters (x, y, z) are{" "}
+          <strong>variables</strong>. Uppercase letters (A, B, C) are{" "}
+          <strong>constants</strong>. Terms like f(x), p(A,y) are{" "}
+          <strong>compound terms</strong> with functor and arguments.
+        </AlertDescription>
+      </Alert>
       {/* Algorithm Reference */}
       <Card className="mt-6">
         <CardHeader>
