@@ -110,7 +110,7 @@ const getProbabilityColor = (probability: number) => {
 
 export default function BayesianNetworkDemo() {
   const [selectedNetworkId, setSelectedNetworkId] =
-    useState<keyof typeof predefinedNetworks>("weather");
+    useState<keyof typeof predefinedNetworks>("LISP");
   const [network, setNetwork] = useState<{
     nodes: {
       id: string;
