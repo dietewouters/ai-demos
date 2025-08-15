@@ -37,7 +37,6 @@ const links = [
       },
     ],
   },
-  { name: "Probability", href: "/mainpage/probability" },
   {
     name: "LLMs",
     href: "/mainpage/llms",
@@ -56,7 +55,11 @@ const links = [
       { name: "Independence", href: "/mainpage/bayesiannets/dsep" },
     ],
   },
-  { name: "Solvers", href: "/mainpage/solvers" },
+  {
+    name: "Solvers",
+    href: "/mainpage/solvers",
+    children: [{ name: "General", href: "/mainpage/solvers/general" }],
+  },
   { name: "ML", href: "/mainpage/ml" },
   { name: "Bayesian Learning", href: "/mainpage/bayesianlearning" },
 ];
