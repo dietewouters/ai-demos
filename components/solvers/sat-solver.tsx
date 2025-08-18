@@ -1,367 +1,364 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Settings } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Select,
-  SelectContent,
-  SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectContent,
+  SelectItem,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+
 import { parseFormula } from "@/components/solvers/lib/formula-parser";
 import { DPLLSolver } from "@/components/solvers/lib/dpll-algorithm";
 import { TreeVisualization } from "@/components/solvers/tree-visualisation";
-import { getStepTraversalOrder } from "@/components/solvers/lib/tree-navigation";
-import type { DPLLTree } from "@/components/solvers/lib/dpll-types";
-import { Settings } from "lucide-react";
+import type { DPLLTree, DPLLStep } from "@/components/solvers/lib/dpll-types";
 
 const EXAMPLE_FORMULAS = [
   {
-    name: "Example of DPLL",
-    formula: "(X∨W) ∧ (Y∨Z)",
+    name: "Simple Example",
+    formula: "(¬A∨C∨¬D) ∧ (A∨B∨C∨¬D) ∧ (¬A∨¬E) ∧ ¬C ∧ (A∨D) ∧ (A∨C∨E) ∧ (D∨E)",
   },
-  {
-    name: "Exercise 1.1",
-    formula: "(¬A∨C ∨¬D)∧(A∨B ∨C ∨¬D)∧(¬A∨¬E)∧¬C ∧(A∨D)∧(A∨C ∨E)∧(D ∨E)",
-  },
-  {
-    name: "Exercise 1.2",
-    formula:
-      "(E ∨ A) ∧ (B ∨ ¬A ∨ C) ∧ (E ∨ ¬D) ∧ (B ∨ ¬C) ∧ (¬B ∨ D) ∧ (¬E ∨ ¬A ∨ ¬D ∨ ¬B)",
-  },
-  {
-    name: "Exercise 2",
-    formula:
-      "(¬A ∨ ¬B ∨ ¬C) ∧ (¬A ∨ ¬B ∨ C ∨ D) ∧ (¬A ∨ B ∨ C ∨ D) ∧ (¬A ∨ ¬B ∨ C ∨ ¬D)",
-  },
+  { name: "Basic SAT", formula: "(A∨B) ∧ (¬A∨C) ∧ (¬B∨¬C)" },
+  { name: "Basic UNSAT", formula: "A ∧ ¬A" },
+  { name: "Unit Propagation", formula: "A ∧ (¬A∨B) ∧ (¬B∨C) ∧ ¬C" },
 ];
 
+function getStepOrder(tree: DPLLTree): string[] {
+  return Array.from(tree.steps.values())
+    .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
+    .map((s) => s.id);
+}
+
 export function SATSolverDemo() {
-  const [selectedExample, setSelectedExample] = useState<string>("");
-  const [customFormula, setCustomFormula] = useState<string>("");
-  const [algorithm, setAlgorithm] = useState<string>("dpll");
-  const [unitPropagation, setUnitPropagation] = useState<boolean>(false);
-  const [earlyStopping, setEarlyStopping] = useState<boolean>(false);
-  const [currentFormula, setCurrentFormula] = useState<string>("");
-  const [dpllTree, setDpllTree] = useState<DPLLTree | null>(null);
+  // UI
+  const [selectedExample, setSelectedExample] = useState("");
+  const [customFormula, setCustomFormula] = useState("");
+  const [algorithm, setAlgorithm] = useState<"dpll" | "sat">("dpll");
+  const [unitPropagation, setUnitPropagation] = useState(true);
+  const [earlyStopping, setEarlyStopping] = useState(true);
+
+  const FINISH_ID = "__finish__";
+
+  // Run config snapshot (so we know how the last run was executed)
+  const [runConfig, setRunConfig] = useState<{
+    algo: "dpll" | "sat";
+    early: boolean;
+  } | null>(null);
+
+  // Solver state
+  const [tree, setTree] = useState<DPLLTree | null>(null);
+  const [order, setOrder] = useState<string[]>([]);
   const [activeStepId, setActiveStepId] = useState<string>("");
-  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
-  const [stepOrder, setStepOrder] = useState<string[]>([]);
-  const [errorMsg, setErrorMsg] = useState<string>("");
+  const [idx, setIdx] = useState(0);
 
-  // simpele pre-order traversal (root -> children)
-  const computeTraversal = (tree: DPLLTree): string[] => {
-    const order: string[] = [];
-    const visit = (id: string) => {
-      const step = tree.steps.get(id);
-      if (!step) return;
-      order.push(id);
-      for (const cid of step.children) visit(cid);
-    };
-    visit(tree.rootId);
-    return order;
-  };
-
-  const handleExampleSelect = (value: string) => {
-    setSelectedExample(value);
-    const example = EXAMPLE_FORMULAS.find((f) => f.name === value);
-    if (example) {
-      setCurrentFormula(example.formula);
-      setCustomFormula("");
+  const currentFormula = useMemo(() => {
+    if (selectedExample) {
+      const ex = EXAMPLE_FORMULAS.find((e) => e.name === selectedExample);
+      return ex?.formula ?? "";
     }
-  };
+    return customFormula;
+  }, [selectedExample, customFormula]);
 
-  const handleCustomFormulaChange = (value: string) => {
-    setCustomFormula(value);
-    setCurrentFormula(value);
-    setSelectedExample("");
-  };
+  const isReady = currentFormula.trim().length > 0;
 
-  const handleStartSolver = () => {
-    setErrorMsg("");
-    setDpllTree(null);
-    setActiveStepId("");
-    setCurrentStepIndex(0);
-    setStepOrder([]);
+  // Reveal only up to the *current step*
+  const visibleEvent = useMemo(() => {
+    if (!tree || !activeStepId) return 0;
+    if (activeStepId === FINISH_ID) return Number.POSITIVE_INFINITY; // toon & kleur alles
+    return tree.steps.get(activeStepId)?.createdAt ?? 0; // stap-voor-stap
+  }, [tree, activeStepId]);
 
-    if (!currentFormula) return;
+  const currentStep =
+    tree && activeStepId !== FINISH_ID
+      ? tree.steps.get(activeStepId)
+      : undefined;
 
+  const displayStep = useMemo(() => {
+    if (!currentStep) return undefined;
+    const cutoff = visibleEvent ?? 0;
+    const decisionStamp = currentStep.resolvedAt ?? currentStep.createdAt ?? 0;
+    const resolvedShown = cutoff >= decisionStamp;
+
+    return {
+      ...currentStep,
+      result: resolvedShown ? currentStep.result : "UNKNOWN",
+      modelCount: resolvedShown ? currentStep.modelCount : undefined,
+    } as DPLLStep;
+  }, [currentStep, visibleEvent]);
+
+  // Do we already have model counts?
+  const hasModelCounts =
+    !!tree &&
+    Array.from(tree.steps.values()).some((s) => s.modelCount !== undefined);
+
+  const start = () => {
+    if (!isReady) return;
     try {
-      const parsedFormula = parseFormula(currentFormula);
+      const parsed = parseFormula(currentFormula);
       const solver = new DPLLSolver({ unitPropagation, earlyStopping });
+      const t =
+        algorithm === "sat" ? solver.solveSAT(parsed) : solver.solve(parsed);
 
-      const tree: DPLLTree =
-        algorithm === "sat"
-          ? solver.solveSAT(parsedFormula)
-          : solver.solve(parsedFormula);
+      const ord = getStepOrder(t);
+      setTree(t);
+      setOrder(ord);
+      setActiveStepId(t.rootId);
+      setIdx(ord.indexOf(t.rootId));
+      setRunConfig({ algo: algorithm, early: earlyStopping });
+      const ordWithFinish = [...ord, FINISH_ID];
 
-      // fallback op lokale traversal
-      const order = computeTraversal(tree);
-
-      setDpllTree(tree);
-      setStepOrder(order);
-      setActiveStepId(tree.rootId);
-      setCurrentStepIndex(0);
-    } catch (error: any) {
-      console.error("Error:", error);
-      setErrorMsg(error?.message ?? "Onbekende fout tijdens parsen/solven");
+      setTree(t);
+      setOrder(ordWithFinish);
+      setActiveStepId(t.rootId);
+      setIdx(ordWithFinish.indexOf(t.rootId));
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  const handleNextStep = () => {
-    if (currentStepIndex < stepOrder.length - 1) {
-      const newIndex = currentStepIndex + 1;
-      setCurrentStepIndex(newIndex);
-      setActiveStepId(stepOrder[newIndex]);
-    }
+  const next = () => {
+    if (!tree || idx >= order.length - 1) return;
+    const n = idx + 1;
+    setIdx(n);
+    setActiveStepId(order[n]);
+  };
+  const prev = () => {
+    if (!tree || idx <= 0) return;
+    const n = idx - 1;
+    setIdx(n);
+    setActiveStepId(order[n]);
+  };
+  const reset = () => {
+    if (!tree) return;
+    const i0 = order.indexOf(tree.rootId);
+    setIdx(i0 >= 0 ? i0 : 0);
+    setActiveStepId(tree.rootId);
   };
 
-  const handlePreviousStep = () => {
-    if (currentStepIndex > 0) {
-      const newIndex = currentStepIndex - 1;
-      setCurrentStepIndex(newIndex);
-      setActiveStepId(stepOrder[newIndex]);
-    }
+  const calcModels = () => {
+    if (!tree) return;
+    // compute in place, then clone the Map to trigger rerender
+    const solver = new DPLLSolver({ unitPropagation, earlyStopping: false });
+    solver.computeModelCountsInPlace(tree);
+    setTree({ ...tree, steps: new Map(tree.steps) });
   };
 
-  const handleReset = () => {
-    if (dpllTree) {
-      setActiveStepId(dpllTree.rootId);
-      setCurrentStepIndex(0);
-    }
-  };
-
-  const getCurrentStep = () => {
-    if (!dpllTree || !activeStepId) return null;
-    return dpllTree.steps.get(activeStepId);
-  };
-
-  const currentStep = getCurrentStep();
-  const isReadyToSolve = currentFormula.trim() !== "";
-
-  const visibleEvent = Math.max(
-    currentStep?.createdAt ?? 0,
-    currentStep?.resolvedAt ?? 0
-  );
   return (
     <div className="flex h-screen bg-background">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-foreground">
-          <Settings className="w-5 h-5" aria-hidden="true" />
-          <span className="not-sr-only inline-block text-foreground">
-            Controls
-          </span>
+      {/* Controls */}
+      <CardHeader className="items-start">
+        <CardTitle className="flex items-center gap-2 text-left leading-6">
+          <Settings className="w-5 h-5 shrink-0" />
+          Controls
         </CardTitle>
       </CardHeader>
 
-      <div className="w-80 shrink-0 border-r bg-card p-6 overflow-y-auto sticky top-0 max-h-screen">
-        <div className="space-y-6">
-          {/* Formula Selection */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Choose Formula</Label>
-            <Select value={selectedExample} onValueChange={handleExampleSelect}>
-              <SelectTrigger className="text-xs">
-                <SelectValue placeholder="Select example..." />
-              </SelectTrigger>
-              <SelectContent>
-                {EXAMPLE_FORMULAS.map((example) => (
-                  <SelectItem
-                    key={example.name}
-                    value={example.name}
-                    className="text-xs"
-                  >
-                    {example.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <div className="text-center text-xs text-muted-foreground">or</div>
-
-            <Textarea
-              placeholder="Enter custom formula..."
-              value={customFormula}
-              onChange={(e) => handleCustomFormulaChange(e.target.value)}
-              className="min-h-16 text-xs font-mono"
-            />
-
-            {currentFormula && (
-              <div className="p-2 bg-muted rounded text-xs font-mono break-all">
-                {currentFormula}
-              </div>
-            )}
-          </div>
-
-          {/* Algorithm Selection */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Algorithm</Label>
-            <Select value={algorithm} onValueChange={setAlgorithm}>
-              <SelectTrigger className="text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dpll" className="text-xs">
-                  DPLL
+      <div className="w-80 shrink-0 border-r bg-card p-6 overflow-y-auto">
+        {/* Choose Formula (dropdown + custom) */}
+        <div className="space-y-2 mb-4">
+          <Label className="text-sm font-medium">Choose Formula</Label>
+          <Select
+            value={selectedExample}
+            onValueChange={(v) => {
+              setSelectedExample(v);
+              setCustomFormula("");
+            }}
+          >
+            <SelectTrigger className="text-xs">
+              <SelectValue placeholder="Select example..." />
+            </SelectTrigger>
+            <SelectContent>
+              {EXAMPLE_FORMULAS.map((ex) => (
+                <SelectItem key={ex.name} value={ex.name} className="text-xs">
+                  {ex.name}
                 </SelectItem>
-                <SelectItem value="sat" className="text-xs">
-                  #SAT
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {algorithm === "dpll" && (
-              <div className="space-y-2 p-3 bg-muted/50 rounded">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="unit-prop"
-                    checked={unitPropagation}
-                    onCheckedChange={(checked) =>
-                      setUnitPropagation(checked as boolean)
-                    }
-                  />
-                  <Label htmlFor="unit-prop" className="text-xs">
-                    Unit Propagation
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="early-stop"
-                    checked={earlyStopping}
-                    onCheckedChange={(checked) =>
-                      setEarlyStopping(checked as boolean)
-                    }
-                  />
-                  <Label htmlFor="early-stop" className="text-xs">
-                    Early Stopping
-                  </Label>
-                </div>
-              </div>
-            )}
+          <div className="text-center text-xs text-muted-foreground">or</div>
+
+          <Textarea
+            placeholder="Enter custom formula..."
+            value={customFormula}
+            onChange={(e) => {
+              setCustomFormula(e.target.value);
+              setSelectedExample("");
+            }}
+            className="min-h-16 text-xs font-mono"
+          />
+        </div>
+
+        {currentFormula && (
+          <div className="p-2 bg-muted rounded text-xs font-mono break-all mb-4">
+            {currentFormula}
           </div>
-          {errorMsg && (
-            <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
-              {errorMsg}
+        )}
+
+        {/* Algorithm */}
+        <div className="space-y-2 mb-4">
+          <Label className="text-sm font-medium">Algorithm</Label>
+          <Select
+            value={algorithm}
+            onValueChange={(v) => setAlgorithm(v as "dpll" | "sat")}
+          >
+            <SelectTrigger className="text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="dpll" className="text-xs">
+                DPLL
+              </SelectItem>
+              <SelectItem value="sat" className="text-xs">
+                #SAT
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          {algorithm === "dpll" && (
+            <div className="space-y-2 p-3 bg-muted/50 rounded">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="unit-prop"
+                  checked={unitPropagation}
+                  onCheckedChange={(c) => setUnitPropagation(Boolean(c))}
+                />
+                <Label htmlFor="unit-prop" className="text-xs">
+                  Unit Propagation
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="early-stop"
+                  checked={earlyStopping}
+                  onCheckedChange={(c) => setEarlyStopping(Boolean(c))}
+                />
+                <Label htmlFor="early-stop" className="text-xs">
+                  Early Stopping
+                </Label>
+              </div>
             </div>
           )}
-
-          {/* Start Button */}
-          <Button
-            onClick={handleStartSolver}
-            disabled={!isReadyToSolve}
-            className="w-full"
-          >
-            Start Solving
-          </Button>
-
-          {/* Step Navigation */}
-          {dpllTree && (
-            <>
-              <Separator />
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Step Navigation</Label>
-                  <Badge variant="outline" className="text-xs">
-                    {currentStepIndex + 1} / {stepOrder.length}
-                  </Badge>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePreviousStep}
-                    disabled={currentStepIndex === 0}
-                    className="flex-1 text-xs bg-transparent"
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleNextStep}
-                    disabled={currentStepIndex === stepOrder.length - 1}
-                    className="flex-1 text-xs bg-transparent"
-                  >
-                    Next
-                  </Button>
-                </div>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleReset}
-                  className="w-full text-xs"
-                >
-                  Reset
-                </Button>
-              </div>
-
-              {/* Current Step Info */}
-              {currentStep && (
-                <>
-                  <Separator />
-                  <div className="space-y-3">
-                    <Label className="text-sm font-medium">Current Step</Label>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant={
-                            currentStep.result === "SAT"
-                              ? "default"
-                              : currentStep.result === "UNSAT"
-                              ? "destructive"
-                              : "secondary"
-                          }
-                          className="text-xs"
-                        >
-                          {currentStep.type === "split"
-                            ? "Split"
-                            : currentStep.type === "unit-propagation"
-                            ? "Unit Prop"
-                            : currentStep.result || "Processing"}
-                        </Badge>
-                        {currentStep.modelCount !== undefined && (
-                          <Badge variant="outline" className="text-xs">
-                            {currentStep.modelCount} models
-                          </Badge>
-                        )}
-                      </div>
-
-                      <div className="text-xs text-muted-foreground">
-                        {currentStep.explanation}
-                      </div>
-
-                      {Object.keys(currentStep.assignment).length > 0 && (
-                        <div className="text-xs">
-                          <div className="font-medium">Assignment:</div>
-                          <div className="font-mono">
-                            {Object.entries(currentStep.assignment)
-                              .map(
-                                ([var_, val]) => `${var_}=${val ? "T" : "F"}`
-                              )
-                              .join(", ")}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </>
-          )}
         </div>
+
+        {/* Start */}
+        <Button className="w-full mb-4" disabled={!isReady} onClick={start}>
+          Start Solving
+        </Button>
+
+        {/* After-run actions */}
+        {tree &&
+          runConfig?.algo === "dpll" &&
+          runConfig?.early === false &&
+          !hasModelCounts && (
+            <Button
+              variant="secondary"
+              className="w-full mb-4"
+              onClick={calcModels}
+            >
+              Calculate number of models
+            </Button>
+          )}
+
+        {/* Step navigation */}
+        {tree && (
+          <>
+            <Separator className="my-3" />
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-sm font-medium">Step Navigation</Label>
+              <Badge variant="outline" className="text-xs">
+                {idx + 1} / {order.length}
+              </Badge>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 text-xs bg-transparent"
+                onClick={prev}
+                disabled={idx === 0}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 text-xs bg-transparent"
+                onClick={next}
+                disabled={idx >= order.length - 1}
+              >
+                Next
+              </Button>
+            </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs mt-2"
+              onClick={reset}
+            >
+              Reset
+            </Button>
+
+            {/* Current step info (gated) */}
+            {displayStep && (
+              <>
+                <Separator className="my-3" />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant={
+                        displayStep.result === "SAT"
+                          ? "default"
+                          : displayStep.result === "UNSAT"
+                          ? "destructive"
+                          : "secondary"
+                      }
+                      className="text-xs"
+                    >
+                      {displayStep.type === "split"
+                        ? "Split"
+                        : displayStep.type === "unit-propagation"
+                        ? "Unit Prop"
+                        : displayStep.result || "Processing"}
+                    </Badge>
+                    {typeof displayStep.modelCount === "number" && (
+                      <Badge variant="outline" className="text-xs">
+                        {displayStep.modelCount} models
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {displayStep.explanation}
+                  </div>
+                </div>
+              </>
+            )}
+            {activeStepId === FINISH_ID && (
+              <>
+                <Separator className="my-3" />
+                <div className="text-xs text-muted-foreground">
+                  Finished – full tree shown.
+                </div>
+              </>
+            )}
+          </>
+        )}
       </div>
-      {/* Visualization Area */}
+
+      {/* Visualization */}
       <div className="flex-1 p-6">
-        {dpllTree ? (
+        {tree ? (
           <Card className="h-full">
             <CardHeader>
               <CardTitle className="text-lg">
@@ -370,8 +367,14 @@ export function SATSolverDemo() {
             </CardHeader>
             <CardContent className="h-full overflow-auto">
               <TreeVisualization
-                tree={dpllTree}
+                tree={tree}
                 activeStepId={activeStepId}
+                onStepClick={(id) => {
+                  if (id === FINISH_ID) return;
+                  setActiveStepId(id);
+                  const i = order.indexOf(id);
+                  if (i >= 0) setIdx(i);
+                }}
                 visibleEvent={visibleEvent}
               />
             </CardContent>
@@ -381,7 +384,7 @@ export function SATSolverDemo() {
             <div className="text-center">
               <h3 className="text-lg font-medium mb-2">Ready to Start</h3>
               <p className="text-sm">
-                Choose a formula and click "Start Solving" to begin
+                Choose a formula and click "Start Solving".
               </p>
             </div>
           </div>

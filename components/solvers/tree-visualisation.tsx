@@ -8,7 +8,6 @@ interface TreeVisualizationProps {
   tree: DPLLTree;
   activeStepId?: string;
   onStepClick?: (stepId: string) => void;
-  /** Toon alleen events ≤ visibleEvent (progressive reveal) */
   visibleEvent?: number;
 }
 
@@ -23,7 +22,7 @@ type Pos = { x: number; y: number; w: number; depth: number };
 
 function isVisible(step: DPLLStep | undefined, cutoff: number): boolean {
   if (!step) return false;
-  const created = step.createdAt ?? 0;
+  const created = step.createdAt ?? 0; // ← steps zonder createdAt zijn zichtbaar
   return created <= cutoff;
 }
 
@@ -78,7 +77,6 @@ function layoutVisible(
   }
 }
 
-/** label op de arc: child.edgeLabel of delta(parent→child) */
 function arcLabel(tree: DPLLTree, parentId: string, childId: string): string {
   const child = tree.steps.get(childId);
   const parent = tree.steps.get(parentId);
@@ -102,19 +100,18 @@ export function TreeVisualization({
   visibleEvent,
 }: TreeVisualizationProps) {
   const cutoff = visibleEvent ?? Number.POSITIVE_INFINITY;
+  const [fullscreen, setFullscreen] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // layout + edges voor zichtbare nodes
+  // layout + edges
   const { pos, totalW, totalH, edges, visibleIds } = useMemo(() => {
     const p = new Map<string, Pos>();
     const root = tree.rootId;
     const rootStep = tree.steps.get(root);
+    const rootCreated = rootStep?.createdAt ?? 0;
 
-    // Als de root niet zichtbaar is voor deze cutoff, toon gewoon alles
-    const effCutoff = isVisible(rootStep, cutoff)
-      ? cutoff
-      : Number.POSITIVE_INFINITY;
+    const effCutoff = Math.max(cutoff, rootCreated);
 
     const w = Math.max(measureVisible(tree, root, effCutoff), NODE_W);
     layoutVisible(tree, root, 0, 0, 0, effCutoff, p);
@@ -143,7 +140,7 @@ export function TreeVisualization({
     };
   }, [tree, cutoff]);
 
-  // ---- zoom & pan ----
+  // zoom/pan
   const [scale, setScale] = useState(1);
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
@@ -194,40 +191,48 @@ export function TreeVisualization({
     setTy(0);
   };
 
-  // ---- belangrijk: niet meer auto-fit bij elke layout-wijziging ----
+  // initial fit only
   const didInitialFit = useRef(false);
   useLayoutEffect(() => {
     if (!didInitialFit.current) {
-      fitToScreen(); // éénmalig bij mount
+      fitToScreen();
       didInitialFit.current = true;
     }
-    // GEEN deps op totalW/totalH → anders zoom je elke stap uit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const didFinalFit = useRef(false);
+  useLayoutEffect(() => {
+    if (!isFinite(visibleEvent ?? 0)) {
+      if (!didFinalFit.current) {
+        // zorg dat volledige boom in beeld komt
+        fitToScreen();
+        didFinalFit.current = true;
+      }
+    } else {
+      // zodra je weer in stapmodus komt mag hij opnieuw fitten bij een volgende FINISH
+      didFinalFit.current = false;
+    }
+  }, [visibleEvent]); // ← vaste deps, geen Map o.i.d. hier
+  // auto-focus op actieve zichtbare step (zonder zoomen)
+  // keep a ref to the latest pos so we don't add the Map to the deps
+  const posRef = useRef(pos);
+  useLayoutEffect(() => {
+    posRef.current = pos;
+  }, [pos]);
 
-  // ---- auto-focus op de actieve (nieuwe) zichtbare step, zonder zoomen ----
-  const lastFocusedEvent = useRef(0);
   useLayoutEffect(() => {
     if (!activeStepId) return;
-    const step = tree.steps.get(activeStepId);
-    if (!step) return;
-    const created = step.createdAt ?? 0;
-    if (cutoff < created) return; // step nog niet zichtbaar
-    // focus alleen wanneer we naar een NIEUW event zijn gegaan
-    if ((visibleEvent ?? 0) <= lastFocusedEvent.current) return;
+    if (!isFinite(visibleEvent ?? 0)) return; // bij FINISH niet centreren op 1 node
 
-    const p = pos.get(activeStepId);
+    const p = posRef.current.get(activeStepId);
     const el = containerRef.current;
     if (!p || !el) return;
 
     const cw = el.clientWidth;
     const ch = el.clientHeight;
-    // center node zonder zoom aan te passen
     setTx(cw / 2 - scale * p.x);
     setTy(ch / 2 - scale * p.y);
-
-    lastFocusedEvent.current = visibleEvent ?? lastFocusedEvent.current;
-  }, [visibleEvent, activeStepId, pos, scale, cutoff, tree]);
+  }, [visibleEvent, activeStepId, scale]);
 
   if (!tree.steps.has(tree.rootId)) {
     return (
@@ -240,7 +245,11 @@ export function TreeVisualization({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-[calc(100vh-8rem)] overflow-hidden rounded-md border"
+      className={
+        fullscreen
+          ? "fixed inset-0 z-50 bg-background"
+          : "relative w-full h-[calc(100vh-8rem)] overflow-hidden rounded-md border"
+      }
     >
       {/* Toolbar */}
       <div className="absolute top-2 right-2 z-20 flex gap-1">
@@ -268,6 +277,21 @@ export function TreeVisualization({
         >
           Reset
         </button>
+        {!fullscreen ? (
+          <button
+            onClick={() => setFullscreen(true)}
+            className="px-2 py-1 rounded border bg-white text-xs"
+          >
+            Fullscreen
+          </button>
+        ) : (
+          <button
+            onClick={() => setFullscreen(false)}
+            className="px-2 py-1 rounded border bg-white text-xs"
+          >
+            Back to controls
+          </button>
+        )}
       </div>
 
       {/* Stage */}
@@ -285,12 +309,12 @@ export function TreeVisualization({
         {/* Edges */}
         <svg width={totalW} height={totalH} className="absolute top-0 left-0">
           {edges.map(({ from, to, label }, i) => {
-            const p = pos.get(from)!;
-            const c = pos.get(to)!;
-            const x1 = p.x,
-              y1 = p.y + NODE_H / 2;
-            const x2 = c.x,
-              y2 = c.y - NODE_H / 2;
+            const p0 = pos.get(from)!;
+            const p1 = pos.get(to)!;
+            const x1 = p0.x,
+              y1 = p0.y + NODE_H / 2;
+            const x2 = p1.x,
+              y2 = p1.y - NODE_H / 2;
             const midY1 = y1 + EDGE_STUB;
             const midY2 = y2 - EDGE_STUB;
             const points = `${x1},${y1} ${x1},${midY1} ${x2},${midY2} ${x2},${y2}`;
@@ -331,9 +355,10 @@ export function TreeVisualization({
           const top = p.y - NODE_H / 2;
           const isActive = activeStepId === id;
 
-          const resolvedShown =
-            step.resolvedAt !== undefined &&
-            (visibleEvent ?? Infinity) >= step.resolvedAt;
+          const cutoff = visibleEvent ?? 0;
+          const decisionStamp = step.resolvedAt ?? step.createdAt ?? 0;
+          const resolvedShown = cutoff >= decisionStamp;
+
           const showModels = resolvedShown && step.modelCount !== undefined;
 
           const visualStep: DPLLStep = {

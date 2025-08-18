@@ -1,6 +1,6 @@
 import type { Formula, Clause, Literal, Assignment } from "./dpll-types";
 
-/** Split op top-level (dus niet binnen haakjes) */
+/** Split op top-level (respecteert haakjes) */
 function splitTopLevel(s: string, sep: string): string[] {
   const out: string[] = [];
   let depth = 0,
@@ -15,17 +15,16 @@ function splitTopLevel(s: string, sep: string): string[] {
     }
   }
   out.push(s.slice(last));
-  return out.filter((x) => x.length > 0);
+  return out.filter(Boolean);
 }
 
-/** Strip één of meer paren buitenste haakjes als ze echt de hele string omsluiten */
+/** Strip buitenste haakjes als ze de hele string omsluiten */
 function stripOuterParens(s: string): string {
   let t = s;
   for (;;) {
     if (!(t.startsWith("(") && t.endsWith(")"))) break;
-    // check of de buitenste ) pas op het eind sluit
-    let depth = 0;
-    let ok = true;
+    let depth = 0,
+      ok = true;
     for (let i = 0; i < t.length; i++) {
       const c = t[i];
       if (c === "(") depth++;
@@ -48,49 +47,38 @@ function stripOuterParens(s: string): string {
 }
 
 export function parseFormula(formulaString: string): Formula {
-  // normaliseer symbolen en verwijder whitespace
   const normalized = formulaString
     .replace(/\s+/g, "")
     .replace(/[∧^]/g, "&")
     .replace(/[∨+]/g, "|")
-    .replace(/[¬~]/g, "!") // ¬ of ~ → !
-    .replace(/−/g, "-"); // Unicode minus → ASCII
+    .replace(/[¬~]/g, "!")
+    .replace(/−/g, "-");
 
   const clauses: Clause[] = [];
   const variables = new Set<string>();
 
-  // split op top-level AND
   const clauseStrings = splitTopLevel(normalized, "&");
-
   for (let clauseStr of clauseStrings) {
     clauseStr = stripOuterParens(clauseStr);
-
-    // split op top-level OR
     const literalStrings = splitTopLevel(clauseStr, "|");
     const literals: Literal[] = [];
 
     for (let raw of literalStrings) {
       if (!raw) continue;
-
-      // ondersteun meerdere negaties (!, -)
       let negated = false;
       let lit = raw;
       while (lit.startsWith("!") || lit.startsWith("-")) {
         negated = !negated;
         lit = lit.slice(1);
       }
-
-      // variabelen: A, A1, var_2, ...
       const m = /^([A-Za-z][A-Za-z0-9_]*)$/.exec(lit);
       if (!m) continue;
-
-      const variable = m[1]; // of .toUpperCase() als je alles uppercase wilt
+      const variable = m[1];
       literals.push({ variable, negated });
       variables.add(variable);
     }
 
-    // lege clause = direct UNSAT pad; toch opnemen (lege literals)
-    clauses.push({ literals });
+    clauses.push({ literals }); // ook lege clause bewaren (□)
   }
 
   return { clauses, variables };
@@ -104,14 +92,14 @@ export function formatFormula(formula: Formula): string {
       );
       return clause.literals.length > 1
         ? `(${literalStrs.join("∨")})`
-        : literalStrs[0] ?? "□"; // lege clause tonen als '□'
+        : literalStrs[0] ?? "□";
     })
     .join(" ∧ ");
 }
 
 export function formatAssignment(assignment: Assignment): string {
   const assigned = Object.entries(assignment)
-    .filter(([_, value]) => value !== undefined)
+    .filter(([, value]) => value !== undefined)
     .map(([variable, value]) => `${variable}=${value ? "T" : "F"}`);
   return assigned.length > 0 ? `{${assigned.join(", ")}}` : "{}";
 }

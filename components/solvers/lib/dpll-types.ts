@@ -1,3 +1,5 @@
+export type SATResult = "SAT" | "UNSAT" | "UNKNOWN";
+
 export interface Literal {
   variable: string;
   negated: boolean;
@@ -12,24 +14,31 @@ export interface Formula {
   variables: Set<string>;
 }
 
-export interface Assignment {
-  [variable: string]: boolean | undefined;
-}
+export type Assignment = Record<string, boolean | undefined>;
 
 export interface DPLLStep {
   id: string;
   type: "split" | "unit-propagation" | "result";
-  variable?: string;
-  value?: boolean;
   formula: Formula;
   assignment: Assignment;
   explanation: string;
   parentId?: string;
   children: string[];
-  result?: "SAT" | "UNSAT" | "UNKNOWN";
-  unitClauses?: Clause[];
+
+  result?: SATResult;
   modelCount?: number;
+
+  // split-only
+  variable?: string;
+  value?: boolean;
+
+  // unit-prop-only
+  unitClauses?: Clause[];
+
+  // edge label (parent → this)
   edgeLabel?: string;
+
+  // progressive reveal
   createdAt: number;
   resolvedAt?: number;
 }
@@ -37,7 +46,7 @@ export interface DPLLStep {
 export interface DPLLTree {
   steps: Map<string, DPLLStep>;
   rootId: string;
-  currentStepId: string;
+  currentStepId?: string;
 }
 
 export interface DPLLOptions {

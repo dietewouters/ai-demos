@@ -6,31 +6,27 @@ import type {
   DPLLStep,
   DPLLTree,
   DPLLOptions,
-} from "@/components/solvers/lib/dpll-types";
+} from "./dpll-types";
 
 export class DPLLSolver {
   private options: DPLLOptions;
   private stepCounter = 0;
-  private eventCounter = 0; // voor progressive reveal
+  private eventCounter = 0;
 
   constructor(options: DPLLOptions) {
     this.options = options;
   }
 
-  // ---- Progressive reveal helpers ----
+  // -------- progressive reveal helpers --------
   private nextEvent(): number {
     return ++this.eventCounter;
   }
-
-  // markeer node resolved en timestamp het moment (alleen eerste keer)
   private markResolved(step: DPLLStep, result: "SAT" | "UNSAT") {
     step.result = result;
-    if (step.resolvedAt === undefined) {
-      step.resolvedAt = this.nextEvent();
-    }
+    if (step.resolvedAt === undefined) step.resolvedAt = this.nextEvent();
   }
 
-  // ---- Public API ----
+  // -------- PUBLIC API --------
   solve(formula: Formula): DPLLTree {
     this.stepCounter = 0;
     this.eventCounter = 0;
@@ -50,12 +46,10 @@ export class DPLLSolver {
     };
     steps.set(rootId, rootStep);
 
-    // Start de recursie
     this.dpllRecursive(formula, {}, rootId, steps);
 
-    if (!this.options.earlyStopping) {
-      this.calculateModelCounts(steps, formula.variables);
-    }
+    // ⛔️ No model counting here anymore for DPLL.
+    // We expose a public calculate method you can call later from the UI.
 
     return { steps, rootId, currentStepId: rootId };
   }
@@ -79,40 +73,48 @@ export class DPLLSolver {
     };
     steps.set(rootId, rootStep);
 
-    // #SAT telt altijd alles (geen early stop)
-    const originalOptions = this.options;
+    const original = this.options;
     this.options = { ...this.options, earlyStopping: false };
 
     this.dpllRecursive(formula, {}, rootId, steps);
+    // #SAT always counts models
     this.calculateModelCounts(steps, formula.variables);
 
-    this.options = originalOptions;
-
+    this.options = original;
     return { steps, rootId, currentStepId: rootId };
   }
 
-  // ---- Model count (post-order) ----
+  /** ✅ Public: call this AFTER a full DPLL run (earlyStopping = false). */
+  public computeModelCountsInPlace(tree: DPLLTree) {
+    const root = tree.steps.get(tree.rootId);
+    if (!root) return;
+    // variables-set lives on the root formula you started with
+    const allVars = root.formula.variables;
+    this.calculateModelCounts(tree.steps, allVars);
+  }
+
+  // -------- Model counting (post-order) --------
   private calculateModelCounts(
     steps: Map<string, DPLLStep>,
     allVariables: Set<string>
   ) {
     const visited = new Set<string>();
 
-    const calculateForNode = (stepId: string): number => {
-      if (visited.has(stepId)) return steps.get(stepId)?.modelCount ?? 0;
-      visited.add(stepId);
+    const calc = (id: string): number => {
+      if (visited.has(id)) return steps.get(id)?.modelCount ?? 0;
+      visited.add(id);
 
-      const step = steps.get(stepId);
+      const step = steps.get(id);
       if (!step) return 0;
 
       if (step.children.length === 0) {
         if (step.result === "SAT") {
-          const unassignedCount = this.countUnassignedVariables(
+          const n = this.countUnassignedVariables(
             step.assignment,
             allVariables
           );
-          step.modelCount = Math.pow(2, unassignedCount);
-          step.explanation += ` (${unassignedCount} unassigned vars → 2^${unassignedCount} = ${step.modelCount} models)`;
+          step.modelCount = Math.pow(2, n);
+          step.explanation += ` (${n} unassigned vars → 2^${n} = ${step.modelCount} models)`;
         } else {
           step.modelCount = 0;
         }
@@ -120,19 +122,14 @@ export class DPLLSolver {
       }
 
       let total = 0;
-      for (const cid of step.children) total += calculateForNode(cid);
+      for (const cid of step.children) total += calc(cid);
       step.modelCount = total;
 
-      if (step.type === "split") {
-        step.explanation += ` (Total models: ${total})`;
-      } else if (step.type === "unit-propagation") {
-        step.explanation += ` (Propagated models: ${total})`;
-      }
       return total;
     };
 
     const root = Array.from(steps.values()).find((s) => !s.parentId);
-    if (root) calculateForNode(root.id);
+    if (root) calc(root.id);
   }
 
   private countUnassignedVariables(
@@ -144,23 +141,23 @@ export class DPLLSolver {
     return cnt;
   }
 
-  // ---- DPLL core ----
+  // -------- Core DPLL (unchanged logic, still progressive) --------
   private dpllRecursive(
     formula: Formula,
     assignment: Assignment,
     parentId: string,
     steps: Map<string, DPLLStep>
   ): "SAT" | "UNSAT" {
-    const simplifiedFormula = this.applyAssignment(formula, assignment);
+    const simplified = this.applyAssignment(formula, assignment);
 
-    // SAT-leaf (alle clauses weg)
-    if (simplifiedFormula.clauses.length === 0) {
+    // SAT leaf
+    if (simplified.clauses.length === 0) {
       const createdAt = this.nextEvent();
-      const stepId = this.generateStepId();
-      const step: DPLLStep = {
-        id: stepId,
+      const id = this.generateStepId();
+      const node: DPLLStep = {
+        id,
         type: "result",
-        formula: simplifiedFormula,
+        formula: simplified,
         assignment,
         explanation: "All clauses satisfied - formula is SAT",
         parentId,
@@ -169,23 +166,20 @@ export class DPLLSolver {
         createdAt,
         resolvedAt: createdAt,
       };
-      steps.set(stepId, step);
-      steps.get(parentId)!.children.push(stepId);
-      this.updateResultsUpwards(steps, stepId, createdAt);
+      steps.set(id, node);
+      steps.get(parentId)!.children.push(id);
+      this.updateResultsUpwards(steps, id, createdAt);
       return "SAT";
     }
 
-    // UNSAT-leaf (lege clausule)
-    const emptyClause = simplifiedFormula.clauses.find(
-      (c) => c.literals.length === 0
-    );
-    if (emptyClause) {
+    // UNSAT leaf (empty clause)
+    if (simplified.clauses.some((c) => c.literals.length === 0)) {
       const createdAt = this.nextEvent();
-      const stepId = this.generateStepId();
-      const step: DPLLStep = {
-        id: stepId,
+      const id = this.generateStepId();
+      const node: DPLLStep = {
+        id,
         type: "result",
-        formula: simplifiedFormula,
+        formula: simplified,
         assignment,
         explanation: "Empty clause found - formula is UNSAT",
         parentId,
@@ -194,43 +188,39 @@ export class DPLLSolver {
         createdAt,
         resolvedAt: createdAt,
       };
-      steps.set(stepId, step);
-      steps.get(parentId)!.children.push(stepId);
-      this.updateResultsUpwards(steps, stepId, createdAt);
+      steps.set(id, node);
+      steps.get(parentId)!.children.push(id);
+      this.updateResultsUpwards(steps, id, createdAt);
       return "UNSAT";
     }
 
-    // Unit propagation (dedup + conflicts + edgeLabel)
+    // Unit propagation (with immediate decide if afterUnit decides)
     if (this.options.unitPropagation) {
-      const unitClausesAll = simplifiedFormula.clauses.filter(
+      const unitsAll = simplified.clauses.filter(
         (c) => c.literals.length === 1
       );
-
-      if (unitClausesAll.length > 0) {
-        const units = new Map<string, boolean>(); // var -> value
+      if (unitsAll.length > 0) {
+        const units = new Map<string, boolean>();
         const conflicts = new Set<string>();
 
-        for (const uc of unitClausesAll) {
+        for (const uc of unitsAll) {
           const lit = uc.literals[0];
-          const value = !lit.negated;
-          if (units.has(lit.variable) && units.get(lit.variable) !== value) {
+          const val = !lit.negated;
+          if (units.has(lit.variable) && units.get(lit.variable) !== val)
             conflicts.add(lit.variable);
-          } else {
-            units.set(lit.variable, value);
-          }
+          else units.set(lit.variable, val);
         }
 
-        // Conflict in dezelfde ronde → UNSAT
         if (conflicts.size > 0) {
           const pretty = Array.from(conflicts)
             .map((v) => `${v} en ¬${v}`)
             .join(", ");
           const createdAt = this.nextEvent();
-          const stepId = this.generateStepId();
-          const step: DPLLStep = {
-            id: stepId,
+          const id = this.generateStepId();
+          const node: DPLLStep = {
+            id,
             type: "result",
-            formula: simplifiedFormula,
+            formula: simplified,
             assignment,
             explanation: `Conflicting unit clauses (${pretty}) ⇒ UNSAT`,
             parentId,
@@ -242,60 +232,55 @@ export class DPLLSolver {
               .map((v) => `${v} conflict`)
               .join(", "),
           };
-          steps.set(stepId, step);
-          steps.get(parentId)!.children.push(stepId);
-          this.updateResultsUpwards(steps, stepId, createdAt);
+          steps.set(id, node);
+          steps.get(parentId)!.children.push(id);
+          this.updateResultsUpwards(steps, id, createdAt);
           return "UNSAT";
         }
 
-        // Pas unieke units toe; check conflict met bestaand pad
-        const newAssignment = { ...assignment };
-        let hasChanges = false;
-        for (const [variable, value] of units) {
-          if (newAssignment[variable] === undefined) {
-            newAssignment[variable] = value;
-            hasChanges = true;
-          } else if (newAssignment[variable] !== value) {
+        const nextAssign = { ...assignment };
+        let changed = false;
+        for (const [v, val] of units) {
+          if (nextAssign[v] === undefined) {
+            nextAssign[v] = val;
+            changed = true;
+          } else if (nextAssign[v] !== val) {
             const createdAt = this.nextEvent();
-            const stepId = this.generateStepId();
-            const step: DPLLStep = {
-              id: stepId,
+            const id = this.generateStepId();
+            const node: DPLLStep = {
+              id,
               type: "result",
-              formula: simplifiedFormula,
+              formula: simplified,
               assignment,
-              explanation: `Conflict with existing assignment for ${variable} (wanted ${
-                value ? "T" : "F"
+              explanation: `Conflict with existing assignment for ${v} (wanted ${
+                val ? "T" : "F"
               }) ⇒ UNSAT`,
               parentId,
               children: [],
               result: "UNSAT",
               createdAt,
               resolvedAt: createdAt,
-              edgeLabel: `${variable} conflict`,
+              edgeLabel: `${v} conflict`,
             };
-            steps.set(stepId, step);
-            steps.get(parentId)!.children.push(stepId);
-            this.updateResultsUpwards(steps, stepId, createdAt);
+            steps.set(id, node);
+            steps.get(parentId)!.children.push(id);
+            this.updateResultsUpwards(steps, id, createdAt);
             return "UNSAT";
           }
         }
 
-        // We hebben nieuwe toekenningen door unit-prop
-        if (hasChanges) {
+        if (changed) {
           const createdAt = this.nextEvent();
-          const stepId = this.generateStepId();
-          const afterUnit = this.applyAssignment(formula, newAssignment);
-
+          const id = this.generateStepId();
+          const afterUnit = this.applyAssignment(formula, nextAssign);
           const unitList = Array.from(units.entries())
             .map(([v, val]) => `${v}=${val ? "T" : "F"}`)
             .join(", ");
-
-          // Maak de unit-prop node
-          const step: DPLLStep = {
-            id: stepId,
+          const node: DPLLStep = {
+            id,
             type: "unit-propagation",
             formula: afterUnit,
-            assignment: newAssignment,
+            assignment: nextAssign,
             explanation: `Unit propagation: ${unitList}`,
             parentId,
             children: [],
@@ -308,41 +293,36 @@ export class DPLLSolver {
             edgeLabel: unitList,
             createdAt,
           };
-          steps.set(stepId, step);
-          steps.get(parentId)!.children.push(stepId);
+          steps.set(id, node);
+          steps.get(parentId)!.children.push(id);
 
-          // ⬇️ BESLIST DEZE NODE ZELF?
           if (afterUnit.clauses.length === 0) {
-            // alle clauses weg → SAT
-            step.result = "SAT";
-            step.resolvedAt = createdAt;
-            this.updateResultsUpwards(steps, stepId, createdAt);
+            node.result = "SAT";
+            node.resolvedAt = createdAt;
+            this.updateResultsUpwards(steps, id, createdAt);
             return "SAT";
           }
           if (afterUnit.clauses.some((c) => c.literals.length === 0)) {
-            // lege clausule aanwezig → UNSAT
-            step.result = "UNSAT";
-            step.resolvedAt = createdAt;
-            this.updateResultsUpwards(steps, stepId, createdAt);
+            node.result = "UNSAT";
+            node.resolvedAt = createdAt;
+            this.updateResultsUpwards(steps, id, createdAt);
             return "UNSAT";
           }
 
-          // Anders: verder naar beneden
-          return this.dpllRecursive(formula, newAssignment, stepId, steps);
+          return this.dpllRecursive(formula, nextAssign, id, steps);
         }
       }
     }
 
-    // Kies variabele voor split
-    const unassignedVar = this.chooseVariable(simplifiedFormula, assignment);
-    if (!unassignedVar) {
-      // geen variabelen meer → SAT (zou zelden gebeuren door de checks hierboven)
+    // Choose variable
+    const varToSplit = this.chooseVariable(simplified, assignment);
+    if (!varToSplit) {
       const createdAt = this.nextEvent();
-      const stepId = this.generateStepId();
-      const step: DPLLStep = {
-        id: stepId,
+      const id = this.generateStepId();
+      const node: DPLLStep = {
+        id,
         type: "result",
-        formula: simplifiedFormula,
+        formula: simplified,
         assignment,
         explanation: "No unassigned variables found",
         parentId,
@@ -351,147 +331,128 @@ export class DPLLSolver {
         createdAt,
         resolvedAt: createdAt,
       };
-      steps.set(stepId, step);
-      steps.get(parentId)!.children.push(stepId);
-      this.updateResultsUpwards(steps, stepId, createdAt);
+      steps.set(id, node);
+      steps.get(parentId)!.children.push(id);
+      this.updateResultsUpwards(steps, id, createdAt);
       return "SAT";
     }
 
-    // Split: var = true
-    const trueStepId = this.generateStepId();
+    // TRUE branch
+    const trueId = this.generateStepId();
     const trueCreated = this.nextEvent();
-    const trueAssignment = { ...assignment, [unassignedVar]: true };
-    const trueFormula = this.applyAssignment(formula, trueAssignment);
-    const trueStep: DPLLStep = {
-      id: trueStepId,
+    const trueAssign = { ...assignment, [varToSplit]: true };
+    const trueFormula = this.applyAssignment(formula, trueAssign);
+    const trueNode: DPLLStep = {
+      id: trueId,
       type: "split",
-      variable: unassignedVar,
+      variable: varToSplit,
       value: true,
       formula: trueFormula,
-      assignment: trueAssignment,
-      explanation: `Split: trying ${unassignedVar} = T`,
+      assignment: trueAssign,
+      explanation: `Split: trying ${varToSplit} = T`,
       parentId,
       children: [],
       result: "UNKNOWN",
-      edgeLabel: `${unassignedVar} = T`,
+      edgeLabel: `${varToSplit} = T`,
       createdAt: trueCreated,
     };
-    steps.set(trueStepId, trueStep);
-    steps.get(parentId)!.children.push(trueStepId);
+    steps.set(trueId, trueNode);
+    steps.get(parentId)!.children.push(trueId);
 
-    // ⬇️ Als deze keuze meteen beslist, markeer de split-node zelf en geen child
     let trueResult: "SAT" | "UNSAT";
     if (trueFormula.clauses.length === 0) {
       const stamp = this.nextEvent();
-      trueStep.result = "SAT";
-      trueStep.resolvedAt = stamp;
-      this.updateResultsUpwards(steps, trueStepId, stamp);
+      trueNode.result = "SAT";
+      trueNode.resolvedAt = stamp;
+      this.updateResultsUpwards(steps, trueId, stamp);
       trueResult = "SAT";
     } else if (trueFormula.clauses.some((c) => c.literals.length === 0)) {
       const stamp = this.nextEvent();
-      trueStep.result = "UNSAT";
-      trueStep.resolvedAt = stamp;
-      this.updateResultsUpwards(steps, trueStepId, stamp);
+      trueNode.result = "UNSAT";
+      trueNode.resolvedAt = stamp;
+      this.updateResultsUpwards(steps, trueId, stamp);
       trueResult = "UNSAT";
     } else {
-      trueResult = this.dpllRecursive(
-        formula,
-        trueAssignment,
-        trueStepId,
-        steps
-      );
-      trueStep.result = trueResult;
+      trueResult = this.dpllRecursive(formula, trueAssign, trueId, steps);
+      trueNode.result = trueResult;
     }
 
     if (trueResult === "SAT" && this.options.earlyStopping) {
       const parent = steps.get(parentId);
       if (parent) this.markResolved(parent, "SAT");
-      this.updateResultsUpwards(steps, trueStepId, trueStep.resolvedAt);
+      this.updateResultsUpwards(steps, trueId, trueNode.resolvedAt);
       return "SAT";
     }
 
-    // Split: var = false
-    const falseStepId = this.generateStepId();
+    // FALSE branch
+    const falseId = this.generateStepId();
     const falseCreated = this.nextEvent();
-    const falseAssignment = { ...assignment, [unassignedVar]: false };
-    const falseFormula = this.applyAssignment(formula, falseAssignment);
-    const falseStep: DPLLStep = {
-      id: falseStepId,
+    const falseAssign = { ...assignment, [varToSplit]: false };
+    const falseFormula = this.applyAssignment(formula, falseAssign);
+    const falseNode: DPLLStep = {
+      id: falseId,
       type: "split",
-      variable: unassignedVar,
+      variable: varToSplit,
       value: false,
       formula: falseFormula,
-      assignment: falseAssignment,
-      explanation: `Split: trying ${unassignedVar} = F`,
+      assignment: falseAssign,
+      explanation: `Split: trying ${varToSplit} = F`,
       parentId,
       children: [],
       result: "UNKNOWN",
-      edgeLabel: `${unassignedVar} = F`,
+      edgeLabel: `${varToSplit} = F`,
       createdAt: falseCreated,
     };
-    steps.set(falseStepId, falseStep);
-    steps.get(parentId)!.children.push(falseStepId);
+    steps.set(falseId, falseNode);
+    steps.get(parentId)!.children.push(falseId);
 
     let falseResult: "SAT" | "UNSAT";
     if (falseFormula.clauses.length === 0) {
       const stamp = this.nextEvent();
-      falseStep.result = "SAT";
-      falseStep.resolvedAt = stamp;
-      this.updateResultsUpwards(steps, falseStepId, stamp);
+      falseNode.result = "SAT";
+      falseNode.resolvedAt = stamp;
+      this.updateResultsUpwards(steps, falseId, stamp);
       falseResult = "SAT";
     } else if (falseFormula.clauses.some((c) => c.literals.length === 0)) {
       const stamp = this.nextEvent();
-      falseStep.result = "UNSAT";
-      falseStep.resolvedAt = stamp;
-      this.updateResultsUpwards(steps, falseStepId, stamp);
+      falseNode.result = "UNSAT";
+      falseNode.resolvedAt = stamp;
+      this.updateResultsUpwards(steps, falseId, stamp);
       falseResult = "UNSAT";
     } else {
-      falseResult = this.dpllRecursive(
-        formula,
-        falseAssignment,
-        falseStepId,
-        steps
-      );
-      falseStep.result = falseResult;
+      falseResult = this.dpllRecursive(formula, falseAssign, falseId, steps);
+      falseNode.result = falseResult;
     }
 
-    // Aggregatie & bubbelen
     const aggregated: "SAT" | "UNSAT" =
       trueResult === "SAT" || falseResult === "SAT" ? "SAT" : "UNSAT";
     const parent = steps.get(parentId);
     if (parent) this.markResolved(parent, aggregated);
-    this.updateResultsUpwards(steps, falseStepId);
+
+    const lastStamp = steps.get(falseId)?.resolvedAt ?? this.eventCounter;
+    this.updateResultsUpwards(steps, falseId, lastStamp);
 
     return aggregated;
   }
 
-  // ---- Helpers ----
+  // -------- helpers --------
   private applyAssignment(formula: Formula, assignment: Assignment): Formula {
     const newClauses: Clause[] = [];
-
     for (const clause of formula.clauses) {
-      let clauseSatisfied = false;
-      const newLiterals: Literal[] = [];
-
-      for (const literal of clause.literals) {
-        const varValue = assignment[literal.variable];
+      let satisfied = false;
+      const newLits: Literal[] = [];
+      for (const lit of clause.literals) {
+        const varValue = assignment[lit.variable];
         if (varValue !== undefined) {
-          const literalValue = literal.negated ? !varValue : varValue;
-          if (literalValue) {
-            clauseSatisfied = true;
+          const litVal = lit.negated ? !varValue : varValue;
+          if (litVal) {
+            satisfied = true;
             break;
           }
-          // anders literal is false → niet toevoegen
-        } else {
-          newLiterals.push(literal);
-        }
+        } else newLits.push(lit);
       }
-
-      if (!clauseSatisfied) {
-        newClauses.push({ literals: newLiterals });
-      }
+      if (!satisfied) newClauses.push({ literals: newLits });
     }
-
     return { clauses: newClauses, variables: formula.variables };
   }
 
@@ -499,10 +460,9 @@ export class DPLLSolver {
     formula: Formula,
     assignment: Assignment
   ): string | null {
-    // simpele heuristiek: eerste on-Assigned variabele die voorkomt
     for (const clause of formula.clauses) {
-      for (const literal of clause.literals) {
-        if (assignment[literal.variable] === undefined) return literal.variable;
+      for (const lit of clause.literals) {
+        if (assignment[lit.variable] === undefined) return lit.variable;
       }
     }
     return null;
@@ -512,32 +472,24 @@ export class DPLLSolver {
     return `step_${++this.stepCounter}`;
   }
 
-  // bubbel parent-resultaten omhoog + timestamp wanneer ze voor het eerst resolved worden
   private updateResultsUpwards(
     steps: Map<string, DPLLStep>,
     fromNodeId: string,
-    eventStamp?: number // ← NIEUW
+    eventStamp?: number
   ) {
-    // gebruik dezelfde timestamp als de triggerende leaf/conflict
     const stamp = eventStamp ?? this.nextEvent();
-
     let parentId = steps.get(fromNodeId)?.parentId;
     while (parentId) {
       const parent = steps.get(parentId);
       if (!parent) break;
-
       const childResults = parent.children.map((cid) => steps.get(cid)?.result);
       const prev = parent.result;
 
-      if (childResults.some((r) => r === "SAT")) {
-        parent.result = "SAT";
-      } else if (childResults.every((r) => r === "UNSAT")) {
+      if (childResults.some((r) => r === "SAT")) parent.result = "SAT";
+      else if (childResults.every((r) => r === "UNSAT"))
         parent.result = "UNSAT";
-      } else {
-        parent.result = "UNKNOWN";
-      }
+      else parent.result = "UNKNOWN";
 
-      // timestamp ouder op het moment van dit event (niet een nieuw event)
       if (
         parent.result !== "UNKNOWN" &&
         (prev === undefined || prev === "UNKNOWN") &&
