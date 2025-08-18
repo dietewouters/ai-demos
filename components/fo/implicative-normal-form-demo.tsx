@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,6 +45,24 @@ class Lexer {
   eof(): boolean {
     return this.i >= this.s.length;
   }
+}
+// Zet veelgebruikte ascii naar de juiste symbolen
+function normalizeAscii(input: string): string {
+  let s = input;
+
+  s = s.replace(/\s*<->\s*|\s*<=>\s*|↔/g, " ↔ ");
+  s = s.replace(/\s*->\s*|→/g, " → ");
+
+  s = s.replace(/&&|\/\\|∧/g, " ∧ ");
+  s = s.replace(/\|\||\\\/|∨/g, " ∨ ");
+
+  s = s.replace(/\bnot\b|!|~|¬/gi, " ¬ ");
+
+  s = s.replace(/\bforall\b|∀/gi, "∀");
+  s = s.replace(/\bexists\b|∃/gi, "∃");
+
+  s = s.replace(/\s+/g, " ").trim();
+  return s;
 }
 
 function isSpace(ch: string) {
@@ -246,15 +264,6 @@ function termToString(t: Term): string {
   }
 }
 
-function needsParens(n: FormulaNode): boolean {
-  return (
-    n.kind === "And" ||
-    n.kind === "Or" ||
-    n.kind === "Implies" ||
-    n.kind === "Iff"
-  );
-}
-
 function toStringF(n: FormulaNode): string {
   switch (n.kind) {
     case "Pred":
@@ -269,7 +278,6 @@ function toStringF(n: FormulaNode): string {
           : `(${toStringF(s)})`
       }`;
     }
-
     case "And":
       return `(${toStringF(n.left)} ∧ ${toStringF(n.right)})`;
     case "Or":
@@ -285,14 +293,9 @@ function toStringF(n: FormulaNode): string {
   }
 }
 
-function clone(n: FormulaNode): FormulaNode {
-  return JSON.parse(JSON.stringify(n));
-}
-
 function elimIffImp(n: FormulaNode): FormulaNode {
   switch (n.kind) {
     case "Iff": {
-      // (A ↔ B) ≡ (A → B) ∧ (B → A)
       return {
         kind: "And",
         left: elimIffImp({ kind: "Implies", left: n.left, right: n.right }),
@@ -300,7 +303,6 @@ function elimIffImp(n: FormulaNode): FormulaNode {
       };
     }
     case "Implies": {
-      // (A → B) ≡ (¬A ∨ B)
       return {
         kind: "Or",
         left: { kind: "Not", sub: elimIffImp(n.left) },
@@ -336,31 +338,31 @@ function pushNeg(n: FormulaNode): FormulaNode {
       const s = n.sub;
       switch (s.kind) {
         case "Not":
-          return pushNeg(s.sub); // ¬¬A → A
+          return pushNeg(s.sub);
         case "And":
           return {
             kind: "Or",
             left: pushNeg({ kind: "Not", sub: s.left }),
             right: pushNeg({ kind: "Not", sub: s.right }),
-          }; // ¬(A∧B) → ¬A∨¬B
+          };
         case "Or":
           return {
             kind: "And",
             left: pushNeg({ kind: "Not", sub: s.left }),
             right: pushNeg({ kind: "Not", sub: s.right }),
-          }; // ¬(A∨B) → ¬A∧¬B
+          };
         case "Forall":
           return pushNeg({
             kind: "Exists",
             v: s.v,
             body: { kind: "Not", sub: s.body },
-          }); // ¬∀x φ → ∃x ¬φ
+          });
         case "Exists":
           return pushNeg({
             kind: "Forall",
             v: s.v,
             body: { kind: "Not", sub: s.body },
-          }); // ¬∃x φ → ∀x ¬φ
+          });
         default:
           return { kind: "Not", sub: pushNeg(s) };
       }
@@ -378,7 +380,7 @@ function pushNeg(n: FormulaNode): FormulaNode {
   }
 }
 
-// Standardize apart (rename bound variables uniquely and consistently)
+// Standardize apart
 let freshVarCounter = 0;
 function freshVar(prefix = "v"): string {
   return `${prefix}${freshVarCounter++}`;
@@ -490,7 +492,7 @@ function standardizeApart(
   }
 }
 
-// Prenex: pull quantifiers to the front; assumes standardized apart and no →,↔ and negations pushed
+// Prenex (assumes no →,↔ and negations pushed)
 type Quant = { q: "∀" | "∃"; v: string };
 function toPrenex(n: FormulaNode): { quants: Quant[]; matrix: FormulaNode } {
   switch (n.kind) {
@@ -519,19 +521,19 @@ function toPrenex(n: FormulaNode): { quants: Quant[]; matrix: FormulaNode } {
       };
     }
     case "Not":
-      return { quants: [], matrix: n }; // Not should be only on atoms now
+      return { quants: [], matrix: n };
     default:
       return { quants: [], matrix: n };
   }
 }
 
-// Skolemization: replace ∃ vars with Skolem functions of preceding ∀ vars
+// Skolemization helpers (Uppercase names)
 let skolemCounter = 0;
 function freshSkolemConst() {
-  return `c${skolemCounter++}`;
+  return `C${skolemCounter++}`;
 }
 function freshSkolemFunc() {
-  return `f${skolemCounter++}`;
+  return `F${skolemCounter++}`;
 }
 
 function replaceVarInTerm(t: Term, mapping: Record<string, Term>): Term {
@@ -589,7 +591,6 @@ function skolemize(
     if (q.q === "∀") {
       universals.push(q.v);
     } else {
-      // ∃ variable → replace with Skolem term of current universals
       const skTerm: Term =
         universals.length === 0
           ? { kind: "Const", name: freshSkolemConst() }
@@ -600,20 +601,18 @@ function skolemize(
             };
       const mapping: Record<string, Term> = { [q.v]: skTerm };
       current = replaceVarInFormula(current, mapping);
-      // existential is removed
+      // existential removed
     }
   }
   return { matrix: current, universals };
 }
 
-// Distribute OR over AND to reach CNF
+// CNF helpers
 function distributeOrOverAnd(n: FormulaNode): FormulaNode {
   function dist(a: FormulaNode, b: FormulaNode): FormulaNode {
-    // (a ∨ (b ∧ c)) ≡ (a ∨ b) ∧ (a ∨ c)
     if (b.kind === "And") {
       return { kind: "And", left: dist(a, b.left), right: dist(a, b.right) };
     }
-    // ((a ∧ b) ∨ c) ≡ (a ∨ c) ∧ (b ∨ c)
     if (a.kind === "And") {
       return { kind: "And", left: dist(a.left, b), right: dist(a.right, b) };
     }
@@ -637,7 +636,6 @@ function distributeOrOverAnd(n: FormulaNode): FormulaNode {
   }
 }
 
-// Flatten associative And/Or
 function flatten(n: FormulaNode): FormulaNode {
   function flatAnd(n: FormulaNode): FormulaNode[] {
     if (n.kind === "And") return [...flatAnd(n.left), ...flatAnd(n.right)];
@@ -665,41 +663,13 @@ function flatten(n: FormulaNode): FormulaNode {
   return n;
 }
 
-// Extract clauses (top-level ∧ of disjunctions of literals)
 function collectClauses(n: FormulaNode): FormulaNode[] {
   if (n.kind === "And")
     return [...collectClauses(n.left), ...collectClauses(n.right)];
   return [n];
 }
-function clauseToFactoredString(c: FormulaNode): string {
-  function collectOr(n: FormulaNode, out: FormulaNode[]) {
-    if (n.kind === "Or") {
-      collectOr(n.left, out);
-      collectOr(n.right, out);
-    } else out.push(n);
-  }
-  const lits: FormulaNode[] = [];
-  collectOr(c, lits);
 
-  const neg: string[] = [];
-  const pos: string[] = [];
-  for (const lit of lits) {
-    if (lit.kind === "Not" && lit.sub.kind === "Pred")
-      neg.push(toStringF(lit.sub));
-    else if (lit.kind === "Pred") pos.push(toStringF(lit));
-    else pos.push(toStringF(lit));
-  }
-  const conj = neg.length <= 1 ? neg[0] ?? "" : `(${neg.join(" ∧ ")})`;
-  const disj = pos.length <= 1 ? pos[0] ?? "" : `(${pos.join(" ∨ ")})`;
-  if (neg.length === 0) return disj || "⊤";
-  if (pos.length === 0) return `¬(${conj})`;
-  return `¬(${conj}) ∨ ${disj}`;
-}
-
-// Turn a disjunctive clause into an implicative form: (A1 ∧ ... ∧ Ak) → (B1 ∨ ... ∨ Bm)
-// We will print it as: (B1 ∨ ... ∨ Bm) ⟵ (A1 ∧ ... ∧ Ak)
 function clauseToImplicationString(c: FormulaNode): string {
-  // Collect literals from a clause (which is an Or-tree)
   function collectOr(n: FormulaNode, out: FormulaNode[]) {
     if (n.kind === "Or") {
       collectOr(n.left, out);
@@ -709,8 +679,8 @@ function clauseToImplicationString(c: FormulaNode): string {
   const lits: FormulaNode[] = [];
   collectOr(c, lits);
 
-  const antecedents: string[] = []; // from negative literals (¬P → antecedent P)
-  const consequents: string[] = []; // from positive literals (P → consequent P)
+  const antecedents: string[] = [];
+  const consequents: string[] = [];
 
   for (const lit of lits) {
     if (lit.kind === "Not" && lit.sub.kind === "Pred") {
@@ -718,7 +688,6 @@ function clauseToImplicationString(c: FormulaNode): string {
     } else if (lit.kind === "Pred") {
       consequents.push(toStringF(lit));
     } else {
-      // If something unexpected remains (e.g., nested structure), fallback to raw
       consequents.push(toStringF(lit));
     }
   }
@@ -904,7 +873,8 @@ export default function ImplicativeNormalFormDemo() {
 
   const loadCustomFormula = () => {
     if (customFormula.trim()) {
-      setInputFormula(customFormula.trim());
+      const normalized = normalizeAscii(customFormula.trim());
+      setInputFormula(normalized);
       setSelectedExercise("");
       setSelectedFormula("");
       reset();
@@ -956,140 +926,108 @@ export default function ImplicativeNormalFormDemo() {
     newSteps.push({
       step: stepCount++,
       ...step(
-        "Eliminate Biconditionals and Implications",
+        "Eliminate ↔ and →",
         "Replace A ↔ B with (A → B) ∧ (B → A), then A → B with ¬A ∨ B",
         ast
       ),
     });
 
-    // 2. Move ¬ inwards
+    // 2. Bring negations inside
     ast = pushNeg(ast);
     newSteps.push({
       step: stepCount++,
       ...step(
-        "Move ¬ Inwards",
-        "Apply De Morgan's laws: ¬∀x φ → ∃x ¬φ, ¬∃x φ → ∀x ¬φ.",
+        "Bring the negations inside",
+        "Use De Morgan and quantifier rules: ¬∀x φ ≡ ∃x ¬φ, ¬∃x φ ≡ ∀x ¬φ; ¬(A ∧ B) ≡ ¬A ∨ ¬B; ¬(A ∨ B) ≡ ¬A ∧ ¬B.",
         ast
       ),
     });
 
-    // 3. Standardize variables (apart)
+    // 3. Standardize variable names
     const beforeStd = toStringF(ast);
     ast = standardizeApart(ast);
-    if (toStringF(ast) !== beforeStd) {
-      newSteps.push({
-        step: stepCount++,
-        ...step(
-          "Standardize Variables",
-          "Rename bound variables so each quantifier uses a unique name.",
-          ast
-        ),
-      });
-    }
-
-    // 4. Prenex normal form (pull quantifiers to the front)
-    const pren = toPrenex(ast);
-    const prenexStr = `${pren.quants
-      .map((q) => `${q.q}${q.v}`)
-      .join(" ")} ${toStringF(pren.matrix)}`.trim();
     newSteps.push({
       step: stepCount++,
-      formula: prenexStr,
-      rule: "Prenex Normal Form",
-      description: "Move all quantifiers to the front.",
+      ...step(
+        "Standardize variable names",
+        toStringF(ast) === beforeStd
+          ? "No renaming needed; variables were already standardized."
+          : "Rename bound variables so each quantifier uses a unique name.",
+        ast
+      ),
     });
 
-    // 5. Skolemize (remove ∃ with Skolem terms)
+    // ---- Internally compute prenex to enable Skolemization,
+    // but present steps in the order of the slide (Skolem first, then Prenex) ----
+    const pren = toPrenex(ast);
+
+    // 4. Eliminate ∃ (Introduce Skolems)
     const sk = skolemize(pren.quants, pren.matrix);
-    const afterSk = sk.matrix;
+    const afterSkMatrix = sk.matrix;
     const skPrefix = sk.universals.map((v) => `∀${v}`).join(" ");
-    const skStr = `${skPrefix} ${toStringF(afterSk)}`.trim();
+    const skStr = `${skPrefix} ${toStringF(afterSkMatrix)}`.trim();
     newSteps.push({
       step: stepCount++,
       formula: skStr,
-      rule: "Skolemization",
+      rule: "Eliminate ∃ (Introduce Skolems)",
       description:
         "Replace existential variables with Skolem constants/functions of the preceding universal variables.",
     });
 
-    // 6. Distribute ∨ over ∧ to reach CNF
-    let cnf = distributeOrOverAnd(afterSk);
-    cnf = flatten(cnf);
+    // 5. Bring quantors to the front (Prenex NF)
+    const prenexStr = skStr; // After Skolemization only universals remain; bringing them to front yields the same prefix.
     newSteps.push({
       step: stepCount++,
-      ...step(
-        "Distribute ∨ over ∧",
-        "Apply distributive laws: (A ∨ (B ∧ C)) → (A ∨ B) ∧ (A ∨ C).",
-        cnf
-      ),
+      formula: prenexStr,
+      rule: "Bring quantors to the front (Prenex Normal Form)",
+      description: "Move all remaining (universal) quantifiers to the front.",
     });
 
-    // 7. Eliminate universal quantifiers (they are implicit in clause form)
-    const cnfNoForall = (function dropForall(n: FormulaNode): FormulaNode {
-      if (n.kind === "Forall") return dropForall(n.body);
-      if (n.kind === "And")
-        return {
-          kind: "And",
-          left: dropForall(n.left),
-          right: dropForall(n.right),
-        };
-      if (n.kind === "Or")
-        return {
-          kind: "Or",
-          left: dropForall(n.left),
-          right: dropForall(n.right),
-        };
-      if (n.kind === "Not") return { kind: "Not", sub: dropForall(n.sub) };
-      return n;
-    })(cnf);
+    // 6. Disjunctions to inside (towards CNF) — work on the matrix only
+    let cnfMatrix = distributeOrOverAnd(afterSkMatrix);
+    cnfMatrix = flatten(cnfMatrix);
+    const cnfWithPrefix = `${skPrefix} ${toStringF(cnfMatrix)}`.trim();
     newSteps.push({
       step: stepCount++,
-      ...step(
-        "Eliminate Universal Quantification",
-        "Remove ∀ (universals are implicit in clausal form).",
-        cnfNoForall
-      ),
+      formula: cnfWithPrefix,
+      rule: "Disjunctions to inside",
+      description:
+        "Apply distributive laws to push disjunctions inward: (A ∨ (B ∧ C)) ≡ (A ∨ B) ∧ (A ∨ C).",
     });
 
-    // 8. Split conjunction into separate clauses
-    const clauses = collectClauses(cnfNoForall);
+    // 7. Remove ∧ (split conjunction into separate clauses), still with ∀ prefix
+    const clauses = collectClauses(cnfMatrix);
+    const clauseStringsWithForall = clauses
+      .map((c) => `${skPrefix} ${toStringF(c)}`.trim())
+      .join("\n");
+    newSteps.push({
+      step: stepCount++,
+      formula: clauseStringsWithForall,
+      rule: "Remove ∧",
+      description:
+        "Split the top-level conjunction into separate disjunctive clauses (still under universal quantifiers).",
+    });
+
+    // 8. Remove ∀ (universals are implicit in clausal form)
     const clauseStrings = clauses.map(toStringF);
     newSteps.push({
       step: stepCount++,
       formula: clauseStrings.join("\n"),
-      rule: "Eliminate Conjunction",
+      rule: "Remove ∀",
       description:
-        "Transform the top-level conjunction into a set of disjunctions (clauses).",
+        "Drop universal quantifiers — variables are implicitly universally quantified in clause form.",
     });
 
-    // 9. (Optional) Normalize variables inside each clause (not strictly necessary since we standardized apart)
-    newSteps.push({
-      step: stepCount++,
-      formula: clauseStrings.join("\n"),
-      rule: "Normalize Variables",
-      description:
-        "Variables are already standardized; clauses listed one per line.",
-    });
-    const factoredStrings = clauses.map(clauseToFactoredString);
-    newSteps.push({
-      step: stepCount++,
-      formula: factoredStrings.join("\n"),
-      rule: "Factor Negative Literals (optional)",
-      description:
-        "Rewrite ¬A ∨ ¬B ∨ … ∨ C as ¬(A ∧ B ∧ …) ∨ C to highlight the grouped antecedent (presentation only).",
-    });
-
-    // 10. Convert each clause to an implicative rule form (conjunctive antecedent → disjunctive consequent)
+    // 9. “atoms to other side” → implicative form
     const ruleStrings = clauses.map(clauseToImplicationString);
     newSteps.push({
       step: stepCount++,
       formula: ruleStrings.join("\n"),
-      rule: "Clauses → Implicative Rules",
+      rule: "Negative atoms to other side (Implicative form)",
       description:
-        "Move negative literals to the antecedent (as positive atoms) and keep positive literals in the consequent. Printed as (Consequent) ⟵ (Antecedent).",
+        "Move negative literals to the antecedent (as positive atoms) and keep positive literals in the consequent: (B1 ∨ ... ∨ Bm) ⟵ (A1 ∧ ... ∧ Ak).",
     });
 
-    // Save
     setSteps(newSteps);
     setCompleted(true);
   };
@@ -1105,12 +1043,32 @@ export default function ImplicativeNormalFormDemo() {
   const selectedExerciseData = exercises.find(
     (ex) => ex.id === selectedExercise
   );
+  const customRef = useRef<HTMLInputElement>(null);
+
+  function insertAtCursor(text: string) {
+    const el = customRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+
+    const next = el.value.slice(0, start) + text + el.value.slice(end);
+    setCustomFormula(next);
+
+    // Caret netjes achter het ingevoegde symbool
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + text.length;
+      el.setSelectionRange(pos, pos);
+    });
+  }
+
+  const SYMBOLS = ["∀", "∃", "¬", "∧", "∨", "→", "↔", "(", ")", ","];
 
   return (
     <div className="space-y-6">
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Select or Enter Formula</h3>
-        {/* Exercise Selection (moved to top) */}
+        {/* Exercise Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="exercise-select">Exercise</Label>
@@ -1160,7 +1118,6 @@ export default function ImplicativeNormalFormDemo() {
           </div>
         </div>
 
-        {/* Big OR divider */}
         <div className="flex items-center gap-3">
           <Separator className="flex-1" />
           <span className="text-base md:text-lg font-semibold text-gray-600">
@@ -1169,15 +1126,33 @@ export default function ImplicativeNormalFormDemo() {
           <Separator className="flex-1" />
         </div>
 
-        {/* Custom Formula Input (moved below) */}
+        {/* Custom Formula Input */}
         <div className="space-y-2">
           <Label htmlFor="custom-formula">Enter Custom Formula</Label>
+
+          {/* Symboolbalk */}
+          <div className="flex flex-wrap gap-2 mb-1">
+            {SYMBOLS.map((s) => (
+              <Button
+                key={s}
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => insertAtCursor(s)}
+                title={`Insert ${s}`}
+              >
+                {s}
+              </Button>
+            ))}
+          </div>
+
           <div className="flex gap-2">
             <Input
               id="custom-formula"
+              ref={customRef}
               value={customFormula}
               onChange={(e) => setCustomFormula(e.target.value)}
-              placeholder="Enter a first-order logic formula..."
+              placeholder="Bijv.: forall x (P(x) -> exists y Q(f(x),y))"
               className="font-mono"
             />
             <Button
@@ -1188,15 +1163,6 @@ export default function ImplicativeNormalFormDemo() {
             </Button>
           </div>
         </div>
-
-        {inputFormula && (
-          <div>
-            <Label>Current Formula</Label>
-            <div className="mt-1 p-3 bg-gray-50 rounded border font-mono text-lg">
-              {inputFormula}
-            </div>
-          </div>
-        )}
 
         <div className="flex gap-2 flex-wrap">
           <Button onClick={convertToINF} disabled={!inputFormula}>
@@ -1240,7 +1206,7 @@ export default function ImplicativeNormalFormDemo() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  Step {currentStepData.step + 1}
+                  Step {currentStepData.step}
                   <Badge variant="secondary">{currentStepData.rule}</Badge>
                 </CardTitle>
               </CardHeader>
