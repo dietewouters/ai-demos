@@ -23,13 +23,21 @@ import { TreeVisualization } from "@/components/solvers/tree-visualisation";
 import type { DPLLTree, DPLLStep } from "@/components/solvers/lib/dpll-types";
 
 const EXAMPLE_FORMULAS = [
+  { name: "Example of DPLL", formula: "(x ∨ w) ∧ (y ∨ z)" },
   {
-    name: "Simple Example",
-    formula: "(¬A∨C∨¬D) ∧ (A∨B∨C∨¬D) ∧ (¬A∨¬E) ∧ ¬C ∧ (A∨D) ∧ (A∨C∨E) ∧ (D∨E)",
+    name: "Exercise 1.1",
+    formula: "(¬A∨C ∨¬D)∧(A∨B ∨C ∨¬D)∧(¬A∨¬E)∧¬C ∧(A∨D)∧(A∨C ∨E)∧(D ∨E)",
   },
-  { name: "Basic SAT", formula: "(A∨B) ∧ (¬A∨C) ∧ (¬B∨¬C)" },
-  { name: "Basic UNSAT", formula: "A ∧ ¬A" },
-  { name: "Unit Propagation", formula: "A ∧ (¬A∨B) ∧ (¬B∨C) ∧ ¬C" },
+  {
+    name: "Exercise 1.2",
+    formula:
+      "(E ∨ A) ∧ (B ∨ ¬A ∨ C) ∧ (E ∨ ¬D) ∧ (B ∨ ¬C) ∧ (¬B ∨ D) ∧ (¬E ∨ ¬A ∨ ¬D ∨ ¬B)",
+  },
+  {
+    name: "Exercise 2",
+    formula:
+      "(¬A ∨ ¬B ∨ ¬C) ∧ (¬A ∨ ¬B ∨ C ∨ D) ∧ (¬A ∨ B ∨ C ∨ D) ∧ (¬A ∨ ¬B ∨ C ∨ ¬D)",
+  },
 ];
 
 function getStepOrder(tree: DPLLTree): string[] {
