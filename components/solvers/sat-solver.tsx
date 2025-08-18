@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Settings } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { parseFormula } from "@/components/solvers/lib/formula-parser";
 import { DPLLSolver } from "@/components/solvers/lib/dpll-algorithm";
 import { TreeVisualization } from "@/components/solvers/tree-visualisation";
 import type { DPLLTree, DPLLStep } from "@/components/solvers/lib/dpll-types";
+import { ClauseEffects } from "./clause-effects";
 
 const EXAMPLE_FORMULAS = [
   { name: "Example of DPLL", formula: "(x ∨ w) ∧ (y ∨ z)" },
@@ -160,6 +161,40 @@ export function SATSolverDemo() {
     setTree({ ...tree, steps: new Map(tree.steps) });
   };
 
+  // Ref naar de Textarea
+  const customRef = useRef<HTMLTextAreaElement>(null);
+
+  // Tekst invoegen op cursorpositie
+  function insertAtCursor(text: string) {
+    const el = customRef.current;
+    if (!el) return;
+
+    // als er een voorbeeld gekozen is, overschakelen naar custom invoer
+    setSelectedExample("");
+
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+
+    const next = el.value.slice(0, start) + text + el.value.slice(end);
+    setCustomFormula(next);
+
+    // Caret achter het ingevoegde stuk
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + text.length;
+      el.setSelectionRange(pos, pos);
+    });
+  }
+
+  // Toonbare knoppen (inclusief ASCII en logische varianten)
+  const SYMBOLS: { label: string; insert: string; title?: string }[] = [
+    { label: "¬", insert: "¬", title: "NOT" },
+    { label: "∧", insert: " ∧ ", title: "AND (∧)" },
+    { label: "∨", insert: " ∨ ", title: "OR (∨)" },
+    { label: "(", insert: "(", title: "Open bracket" },
+    { label: ")", insert: ")", title: "Close bracket" },
+  ];
+
   return (
     <div className="flex h-screen bg-background">
       {/* Controls */}
@@ -195,16 +230,34 @@ export function SATSolverDemo() {
 
           <div className="text-center text-xs text-muted-foreground">or</div>
 
-          <Textarea
-            placeholder="Enter custom formula..."
-            value={customFormula}
-            onChange={(e) => {
-              setCustomFormula(e.target.value);
-              setSelectedExample("");
-            }}
-            className="min-h-16 text-xs font-mono"
-          />
+          {/* ⬇️ Symboolbalk */}
+          <div className="flex flex-wrap gap-2 mb-2">
+            {SYMBOLS.map((s) => (
+              <Button
+                key={s.label}
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => insertAtCursor(s.insert)}
+                title={s.title ?? s.label}
+                className="px-2"
+              >
+                {s.label}
+              </Button>
+            ))}
+          </div>
         </div>
+
+        <Textarea
+          ref={customRef}
+          placeholder="Enter custom formula..."
+          value={customFormula}
+          onChange={(e) => {
+            setCustomFormula(e.target.value);
+            setSelectedExample("");
+          }}
+          className="min-h-16 text-xs font-mono"
+        />
 
         {currentFormula && (
           <div className="p-2 bg-muted rounded text-xs font-mono break-all mb-4">
@@ -340,18 +393,27 @@ export function SATSolverDemo() {
                         ? "Unit Prop"
                         : displayStep.result || "Processing"}
                     </Badge>
+
                     {typeof displayStep.modelCount === "number" && (
                       <Badge variant="outline" className="text-xs">
                         {displayStep.modelCount} models
                       </Badge>
                     )}
                   </div>
+
+                  {/* jouw bestaande ‘korte’ uitleg */}
                   <div className="text-xs text-muted-foreground">
                     {displayStep.explanation}
                   </div>
+
+                  {/* ⬇️ extra clausule-uitleg, direct eronder (geen extra card/knoppen) */}
+                  {tree && activeStepId !== FINISH_ID && (
+                    <ClauseEffects tree={tree} activeStepId={activeStepId} />
+                  )}
                 </div>
               </>
             )}
+
             {activeStepId === FINISH_ID && (
               <>
                 <Separator className="my-3" />

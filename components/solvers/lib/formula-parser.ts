@@ -45,21 +45,62 @@ function stripOuterParens(s: string): string {
   }
   return t;
 }
+/** Normaliseer invoer naar &, |, !; accepteer ook V/v en ^ als operators. */
+function normalizeInput(s: string): string {
+  // Uniformeer minteken
+  s = s.replace(/−/g, "-");
+
+  // Unicode symbolen → ascii
+  s = s.replace(/[∧]/g, "&");
+  s = s.replace(/[∨]/g, "|");
+  s = s.replace(/[¬]/g, "!");
+
+  // '^' is AND – dit kan veilig globaal (caret komt niet in variabelen voor)
+  s = s.replace(/\^/g, "&");
+
+  // '+' als OR wanneer tussen atomen/haakjes staat
+  s = s.replace(/([A-Za-z0-9_)])\s*\+\s*([A-Za-z0-9_(])/g, "$1|$2");
+
+  // 'V'/'v' als OR – alleen wanneer het duidelijk als operator staat
+  // (dus met spatie(s) en/of haakjes als scheiding), zodat 'ALIVE' e.d. niet stuk gaan.
+  s = s
+    .replace(/\)\s*[vV]\s*\(/g, ")|(") // ) V (
+    .replace(/([A-Za-z0-9_])\s+[vV]\s+([A-Za-z0-9_])/g, "$1|$2") // A V B
+    .replace(/([A-Za-z0-9_])\s+[vV]\s*\(/g, "$1|(") // A V (
+    .replace(/\)\s*[vV]\s+([A-Za-z0-9_])/g, ")|$1"); // ) V B
+
+  // Spaties weg pas nadat we operatoren herkend hebben
+  s = s.replace(/\s+/g, "");
+
+  return s;
+}
 
 export function parseFormula(formulaString: string): Formula {
   const normalized = formulaString
-    .replace(/\s+/g, "")
-    .replace(/[∧^]/g, "&")
-    .replace(/[∨+]/g, "|")
+    .replace(/−/g, "-")
     .replace(/[¬~]/g, "!")
-    .replace(/−/g, "-");
+    .replace(/[∧^]/g, "&") // ^ én ∧ => AND
+    .replace(/\b[Vv]\b/g, "|") // V of v tussen spaties => OR
+    .replace(/[∨+]/g, "|") // ∨ of + => OR
+    .replace(/\s+/g, ""); // spaties pas als laatste weg
 
   const clauses: Clause[] = [];
   const variables = new Set<string>();
 
-  const clauseStrings = splitTopLevel(normalized, "&");
-  for (let clauseStr of clauseStrings) {
-    clauseStr = stripOuterParens(clauseStr);
+  // Queue: split op top-level &, maar blijf door-splitten nadat haakjes zijn gestript
+  const queue: string[] = splitTopLevel(normalized, "&").filter(Boolean);
+
+  while (queue.length) {
+    let clauseStr = stripOuterParens(queue.shift()!);
+
+    // Als er nu nog een top-level & in zit (bijv. "A&B"), verder opsplitsen
+    const parts = splitTopLevel(clauseStr, "&").filter(Boolean);
+    if (parts.length > 1) {
+      queue.unshift(...parts.map(stripOuterParens));
+      continue;
+    }
+
+    // Deze clause is een disjunctie van literalen
     const literalStrings = splitTopLevel(clauseStr, "|");
     const literals: Literal[] = [];
 
@@ -78,7 +119,8 @@ export function parseFormula(formulaString: string): Formula {
       variables.add(variable);
     }
 
-    clauses.push({ literals }); // ook lege clause bewaren (□)
+    // ook lege clause (□) bewaren
+    clauses.push({ literals });
   }
 
   return { clauses, variables };

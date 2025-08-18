@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -250,6 +250,39 @@ export function WMCDemo() {
     if (!allHalf || satCount == null) return null;
     return satCount / Math.pow(2, n);
   }, [satCount, n, allHalf]);
+  // Ref naar de Textarea
+  const customRef = useRef<HTMLTextAreaElement>(null);
+
+  // Tekst invoegen op cursorpositie
+  function insertAtCursor(text: string) {
+    const el = customRef.current;
+    if (!el) return;
+
+    // als er een voorbeeld gekozen is, overschakelen naar custom invoer
+    setSelectedExample("");
+
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+
+    const next = el.value.slice(0, start) + text + el.value.slice(end);
+    setCustomFormula(next);
+
+    // Caret achter het ingevoegde stuk
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + text.length;
+      el.setSelectionRange(pos, pos);
+    });
+  }
+
+  // Toonbare knoppen (inclusief ASCII en logische varianten)
+  const SYMBOLS: { label: string; insert: string; title?: string }[] = [
+    { label: "¬", insert: "¬", title: "NOT" },
+    { label: "∧", insert: " ∧ ", title: "AND (∧)" },
+    { label: "∨", insert: " ∨ ", title: "OR (∨)" },
+    { label: "(", insert: "(", title: "Open bracket" },
+    { label: ")", insert: ")", title: "Close bracket" },
+  ];
 
   return (
     <div className="flex h-screen bg-background">
@@ -277,10 +310,26 @@ export function WMCDemo() {
               ))}
             </SelectContent>
           </Select>
-
           <div className="text-center text-xs text-muted-foreground">or</div>
+          {/* ⬇️ Symboolbalk */}
+          <div className="flex flex-wrap gap-2 mb-2">
+            {SYMBOLS.map((s) => (
+              <Button
+                key={s.label}
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => insertAtCursor(s.insert)}
+                title={s.title ?? s.label}
+                className="px-2"
+              >
+                {s.label}
+              </Button>
+            ))}
+          </div>
 
           <Textarea
+            ref={customRef}
             placeholder="Enter custom formula..."
             value={customFormula}
             onChange={(e) => {

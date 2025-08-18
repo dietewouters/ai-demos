@@ -24,6 +24,7 @@ export interface DPLLStep {
   explanation: string;
   parentId?: string;
   children: string[];
+  inputFormula?: Formula;
 
   result?: SATResult;
   modelCount?: number;
@@ -41,6 +42,7 @@ export interface DPLLStep {
   // progressive reveal
   createdAt: number;
   resolvedAt?: number;
+  deltaApplied?: Array<{ variable: string; value: boolean }>;
 }
 
 export interface DPLLTree {
