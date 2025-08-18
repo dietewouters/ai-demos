@@ -58,7 +58,10 @@ const links = [
   {
     name: "Solvers",
     href: "/mainpage/solvers",
-    children: [{ name: "General", href: "/mainpage/solvers/general" }],
+    children: [
+      { name: "SAT", href: "/mainpage/solvers/general" },
+      { name: "WMC", href: "/mainpage/solvers/wmc" },
+    ],
   },
   { name: "ML", href: "/mainpage/ml" },
   { name: "Bayesian Learning", href: "/mainpage/bayesianlearning" },
