@@ -64,7 +64,16 @@ const links = [
     ],
   },
   { name: "ML", href: "/mainpage/ml" },
-  { name: "Bayesian Learning", href: "/mainpage/bayesianlearning" },
+  {
+    name: "Bayesian Learning",
+    href: "/mainpage/bayesianlearning",
+    children: [
+      {
+        name: "Beta-Function",
+        href: "/mainpage/bayesianlearning/beta-function",
+      },
+    ],
+  },
 ];
 
 type LinkItem = {
