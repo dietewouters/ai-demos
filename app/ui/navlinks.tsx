@@ -72,6 +72,11 @@ const links = [
         name: "Beta-Function",
         href: "/mainpage/bayesianlearning/beta-function",
       },
+      { name: "HMM", href: "/mainpage/bayesianlearning/hmm" },
+      {
+        name: "Expectation Maximization",
+        href: "/mainpage/bayesianlearning/expmax",
+      },
     ],
   },
 ];

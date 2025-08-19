@@ -279,8 +279,9 @@ export default function DSeparationDemo() {
                 <SelectValue placeholder="Select a network" />
               </SelectTrigger>
               <SelectContent>
-                {predefinedNetworks.map((net) => (
+                {predefinedNetworks.map((net, i) => (
                   <SelectItem
+                    key={net.name ?? `unnamed-${i}`}
                     value={net.name ?? ""}
                     disabled={net.name === undefined}
                   >
