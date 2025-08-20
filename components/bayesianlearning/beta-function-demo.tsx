@@ -3,7 +3,6 @@
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { Badge } from "@/components/ui/badge";
 
 // Beta function calculation
 function betaFunction(a: number, b: number): number {
@@ -41,6 +40,7 @@ function generateCurve(a: number, b: number, points = 200) {
 
 const clamp = (v: number, min: number, max: number) =>
   Math.min(Math.max(v, min), max);
+
 // pretty rounding for display (1 decimal), trims trailing .0 and fixes -0
 const fmt1 = (n: number) => {
   const r = Math.round((n + Number.EPSILON) * 10) / 10;
@@ -48,11 +48,17 @@ const fmt1 = (n: number) => {
   return s === "-0" ? "0" : s;
 };
 
+type MapInfo =
+  | { kind: "interior"; xs: number[] }
+  | { kind: "left" | "right"; xs: [0] | [1] }
+  | { kind: "both"; xs: [0, 1] }
+  | { kind: "flat"; xs: [] };
+
 export default function BetaFunctionDemo() {
   const [a, setA] = useState([2]);
   const [b, setB] = useState([2]);
 
-  // Generate curves for current parameters and reference curves
+  // Generate curves (reference curves kept for future use)
   const currentCurve = useMemo(() => generateCurve(a[0], b[0]), [a, b]);
   const referenceCurves = useMemo(
     () => ({
@@ -63,11 +69,22 @@ export default function BetaFunctionDemo() {
     []
   );
 
-  // Calculate statistics
+  // Statistics
   const mean = a[0] / (a[0] + b[0]);
   const variance =
     (a[0] * b[0]) / (Math.pow(a[0] + b[0], 2) * (a[0] + b[0] + 1));
-  const mode = a[0] > 1 && b[0] > 1 ? (a[0] - 1) / (a[0] + b[0] - 2) : null;
+
+  // MAP cases
+  const mapInfo = useMemo<MapInfo>(() => {
+    const A = a[0],
+      B = b[0];
+    if (A === 1 && B === 1) return { kind: "flat", xs: [] };
+    if (A > 1 && B > 1)
+      return { kind: "interior", xs: [(A - 1) / (A + B - 2)] };
+    if (A <= 1 && B <= 1) return { kind: "both", xs: [0, 1] };
+    if (A <= 1) return { kind: "left", xs: [0] };
+    return { kind: "right", xs: [1] };
+  }, [a, b]);
 
   // SVG dimensions
   const width = 600;
@@ -87,8 +104,8 @@ export default function BetaFunctionDemo() {
       .join(" ");
   };
 
-  // Layout for above-chart mean badge
-  const padTop = 52; // extra headroom for the badge
+  // Layout for above-chart badges
+  const padTop = 96; // extra headroom for μ + MAP badges
   const meanX = xScale(mean);
   const badgeW = 180;
   const badgeLeft = clamp(
@@ -97,8 +114,67 @@ export default function BetaFunctionDemo() {
     width - margin.right - badgeW
   );
 
+  const mapColor = "#16a34a"; // green-600
+  const mapBandWidth = 8;
+  const mapBadgeTop = 6 + 44; // onder μ-badge
+  const centerBadgeLeft = clamp(
+    width / 2 - badgeW / 2,
+    margin.left,
+    width - margin.right - badgeW
+  );
+
+  // Tekst voor MAP-badges (met ingevulde waarden)
+  const mapBadgeText = (mx: number) => {
+    const A = a[0],
+      B = b[0];
+    if (mapInfo.kind === "interior") {
+      return {
+        title: `MAP = ${mx.toFixed(3)}`,
+        sub: `(a-1)/(a+b-2) = ${fmt1(A - 1)}/(${fmt1(A)}+${fmt1(B)}-2)`,
+      };
+    }
+    if (mapInfo.kind === "left") {
+      return { title: `MAP = 0`, sub: `a = ${fmt1(A)} ≤ 1 ⇒ θ = 0` };
+    }
+    if (mapInfo.kind === "right") {
+      return { title: `MAP = 1`, sub: `b = ${fmt1(B)} ≤ 1 ⇒ θ = 1` };
+    }
+    if (mapInfo.kind === "both") {
+      return {
+        title: `MAP niet uniek: 0 en 1`,
+        sub: `a = ${fmt1(A)} ≤ 1 en b = ${fmt1(B)} ≤ 1`,
+      };
+    }
+    // flat
+    return { title: `Geen unieke MAP`, sub: `Uniform: a = 1, b = 1` };
+  };
+
   return (
     <div className="space-y-6">
+      {/* Uitlegkaart bovenaan */}
+      <Card>
+        <CardHeader>
+          <CardTitle>What does the Beta distribution represent?</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm leading-6">
+          <p>
+            We often use the beta distribution as a prior to estimate the
+            probability of a certain parameter. The a and b are parameters that
+            show a virtual count (a = positive examples and b = negative). The
+            higher the values, the more certain we are of a certain probability,
+            e.g. (1,1), (2.2) and (5.5) all have the same mean (0.5), but are
+            increasingly concentrated around the probability 0.5. More of a
+            certain type of count shifts the probability in that direction:
+            increasing a (= number of positive examples) brings the probability
+            mass closer to the probability 1. Intuition: more ‘positive
+            examples’ ( <span className="font-mono">a</span> increase) shifts
+            mass to <span className="font-mono">θ = 1</span>; more "negative
+            examples" ( increase <span className="font-mono">b</span>) shifts
+            mass to <span className="font-mono">θ = 0</span>.
+          </p>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Controls */}
         <Card>
@@ -155,12 +231,40 @@ export default function BetaFunctionDemo() {
                 >
                   [2,2]
                 </button>
+
+                <button
+                  onClick={() => {
+                    setA([3]);
+                    setB([2]);
+                  }}
+                  className="w-full text-left p-2 rounded bg-blue-50 hover:bg-blue-100 text-sm"
+                >
+                  [3,2]
+                </button>
+                <button
+                  onClick={() => {
+                    setA([4]);
+                    setB([2]);
+                  }}
+                  className="w-full text-left p-2 rounded bg-purple-50 hover:bg-purple-100 text-sm"
+                >
+                  [4,2]
+                </button>
+                <button
+                  onClick={() => {
+                    setA([5]);
+                    setB([2]);
+                  }}
+                  className="w-full text-left p-2 rounded bg-orange-50 hover:bg-orange-100 text-sm"
+                >
+                  [5,2]
+                </button>
                 <button
                   onClick={() => {
                     setA([5]);
                     setB([5]);
                   }}
-                  className="w-full text-left p-2 rounded bg-purple-50 hover:bg-purple-100 text-sm"
+                  className="w-full text-left p-2 rounded bg-yellow-50 hover:bg-yellow-100 text-sm"
                 >
                   [5,5]
                 </button>
@@ -177,7 +281,7 @@ export default function BetaFunctionDemo() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Wrapper adds headroom and hosts the above-chart mean badge */}
+            {/* Wrapper adds headroom and hosts the above-chart badges */}
             <div className="relative" style={{ width, paddingTop: padTop }}>
               {/* Mean badge ABOVE the chart */}
               <div
@@ -189,6 +293,101 @@ export default function BetaFunctionDemo() {
                   a/(a+b) = {a[0]}/({a[0]}+{b[0]})
                 </div>
               </div>
+
+              {/* MAP badge(s) ABOVE the chart */}
+              {mapInfo.kind === "interior" &&
+                (() => {
+                  const mx = mapInfo.xs[0];
+                  const mxPix = xScale(mx);
+                  const left = clamp(
+                    mxPix - badgeW / 2,
+                    margin.left,
+                    width - margin.right - badgeW
+                  );
+                  const { title, sub } = mapBadgeText(mx);
+                  return (
+                    <div
+                      className="absolute z-10 select-none pointer-events-none rounded-md bg-white/95 shadow-sm px-3 py-2 text-sm font-medium"
+                      style={{
+                        left,
+                        top: mapBadgeTop,
+                        width: badgeW,
+                        border: "1px solid #16a34a",
+                        color: "#166534",
+                      }}
+                    >
+                      <div className="font-bold">{title}</div>
+                      <div className="font-mono text-xs">{sub}</div>
+                    </div>
+                  );
+                })()}
+
+              {(mapInfo.kind === "left" || mapInfo.kind === "right") &&
+                (() => {
+                  const mx = mapInfo.xs[0];
+                  const mxPix = xScale(mx);
+                  const left = clamp(
+                    mxPix - badgeW / 2,
+                    margin.left,
+                    width - margin.right - badgeW
+                  );
+                  const { title, sub } = mapBadgeText(mx);
+                  return (
+                    <div
+                      className="absolute z-10 select-none pointer-events-none rounded-md bg-white/95 shadow-sm px-3 py-2 text-sm font-medium"
+                      style={{
+                        left,
+                        top: mapBadgeTop,
+                        width: badgeW,
+                        border: "1px solid #16a34a",
+                        color: "#166534",
+                      }}
+                    >
+                      <div className="font-bold">{title}</div>
+                      <div className="font-mono text-xs">{sub}</div>
+                    </div>
+                  );
+                })()}
+
+              {mapInfo.kind === "both" &&
+                (() => {
+                  const { title, sub } = mapBadgeText(0);
+                  return (
+                    <div
+                      className="absolute z-10 select-none pointer-events-none rounded-md bg-white/95 shadow-sm px-3 py-2 text-sm font-medium"
+                      style={{
+                        left: centerBadgeLeft,
+                        top: mapBadgeTop,
+                        width: badgeW,
+                        border: "1px solid #16a34a",
+                        color: "#166534",
+                      }}
+                    >
+                      <div className="font-bold">{title}</div>
+                      <div className="font-mono text-xs">{sub}</div>
+                    </div>
+                  );
+                })()}
+
+              {mapInfo.kind === "flat" &&
+                (() => {
+                  const { title, sub } = mapBadgeText(0);
+                  return (
+                    <div
+                      className="absolute z-10 select-none pointer-events-none rounded-md bg-white/95 shadow-sm px-3 py-2 text-sm font-medium"
+                      style={{
+                        left: centerBadgeLeft,
+                        top: mapBadgeTop,
+                        width: badgeW,
+                        border: "1px solid #16a34a",
+                        color: "#166534",
+                      }}
+                    >
+                      <div className="font-bold">{title}</div>
+                      <div className="font-mono text-xs">{sub}</div>
+                    </div>
+                  );
+                })()}
 
               <svg
                 width={width}
@@ -301,66 +500,6 @@ export default function BetaFunctionDemo() {
                   P(Θ = θ)
                 </text>
 
-                {/* Formula box */}
-                <g transform="translate(80, 50)">
-                  <rect
-                    x="-5"
-                    y="-15"
-                    width="260"
-                    height="35"
-                    fill="white"
-                    stroke="#ddd"
-                    strokeWidth="1"
-                    rx="3"
-                  />
-                  <text
-                    x="0"
-                    y="0"
-                    fontSize="12"
-                    fontFamily="monospace"
-                    fontWeight="bold"
-                  >
-                    f(x) = x^(a-1) × (1-x)^(b-1) / B(a,b)
-                  </text>
-                  <text
-                    x="0"
-                    y="15"
-                    fontSize="10"
-                    fontFamily="monospace"
-                    fill="#666"
-                  >
-                    {`Current: x^${fmt1(a[0] - 1)} × (1-x)^${fmt1(
-                      b[0] - 1
-                    )} / B(${fmt1(a[0])},${fmt1(b[0])})`}
-                  </text>
-                </g>
-
-                {/* Reference curves (lighter) */}
-                <path
-                  d={createPath(referenceCurves.uniform)}
-                  fill="none"
-                  stroke="#ef4444"
-                  strokeWidth="2"
-                  opacity="0.3"
-                  strokeDasharray="5,5"
-                />
-                <path
-                  d={createPath(referenceCurves.moderate)}
-                  fill="none"
-                  stroke="#10b981"
-                  strokeWidth="2"
-                  opacity="0.3"
-                  strokeDasharray="5,5"
-                />
-                <path
-                  d={createPath(referenceCurves.peaked)}
-                  fill="none"
-                  stroke="#8b5cf6"
-                  strokeWidth="2"
-                  opacity="0.3"
-                  strokeDasharray="5,5"
-                />
-
                 {/* Current curve */}
                 <path
                   d={createPath(currentCurve)}
@@ -369,7 +508,7 @@ export default function BetaFunctionDemo() {
                   strokeWidth="3"
                 />
 
-                {/* Mean band + line + axis pointer (kept inside chart) */}
+                {/* Mean band + line + axis pointer */}
                 <rect
                   x={meanX - 4}
                   y={margin.top}
@@ -406,70 +545,57 @@ export default function BetaFunctionDemo() {
                   μ
                 </text>
 
-                {/* Reference curves legend in top right */}
-                <g transform="translate(450, 40)">
-                  <text fontSize="12" fontWeight="bold">
-                    Reference:
-                  </text>
-                  <g transform="translate(0, 15)">
-                    <line
-                      x1="0"
-                      y1="0"
-                      x2="15"
-                      y2="0"
-                      stroke="#ef4444"
-                      strokeWidth="2"
-                      opacity="0.3"
-                      strokeDasharray="5,5"
-                    />
-                    <text x="20" y="4" fontSize="9">
-                      [1,1]
-                    </text>
-                  </g>
-                  <g transform="translate(0, 28)">
-                    <line
-                      x1="0"
-                      y1="0"
-                      x2="15"
-                      y2="0"
-                      stroke="#10b981"
-                      strokeWidth="2"
-                      opacity="0.3"
-                      strokeDasharray="5,5"
-                    />
-                    <text x="20" y="4" fontSize="9">
-                      [2,2]
-                    </text>
-                  </g>
-                  <g transform="translate(0, 41)">
-                    <line
-                      x1="0"
-                      y1="0"
-                      x2="15"
-                      y2="0"
-                      stroke="#8b5cf6"
-                      strokeWidth="2"
-                      opacity="0.3"
-                      strokeDasharray="5,5"
-                    />
-                    <text x="20" y="4" fontSize="9">
-                      [5,5]
-                    </text>
-                  </g>
-                  <g transform="translate(0, 54)">
-                    <line
-                      x1="0"
-                      y1="0"
-                      x2="15"
-                      y2="0"
-                      stroke="#2563eb"
-                      strokeWidth="3"
-                    />
-                    <text x="20" y="4" fontSize="9" fontWeight="bold">
-                      [{a[0]},{b[0]}]
-                    </text>
-                  </g>
-                </g>
+                {/* MAP band(s) + line(s) + axis pointer(s) */}
+                {mapInfo.kind !== "flat" &&
+                  mapInfo.xs.map((mx, idx) => {
+                    const mxPix = xScale(mx);
+                    return (
+                      <g key={`map-line-${idx}-${mx}`}>
+                        <rect
+                          x={mxPix - mapBandWidth / 2}
+                          y={margin.top}
+                          width={mapBandWidth}
+                          height={chartHeight}
+                          fill={mapColor}
+                          opacity="0.08"
+                        />
+                        <line
+                          x1={mxPix}
+                          y1={margin.top}
+                          x2={mxPix}
+                          y2={height - margin.bottom}
+                          stroke={mapColor}
+                          strokeWidth={3}
+                          strokeDasharray="4,3"
+                        />
+                        <circle
+                          cx={mxPix}
+                          cy={margin.top}
+                          r={3.5}
+                          fill={mapColor}
+                        />
+                        <path
+                          d={`M ${mxPix - 6} ${height - margin.bottom} L ${
+                            mxPix + 6
+                          } ${height - margin.bottom} L ${mxPix} ${
+                            height - margin.bottom + 9
+                          } Z`}
+                          fill={mapColor}
+                          opacity={0.9}
+                        />
+                        <text
+                          x={mxPix}
+                          y={height - margin.bottom + 22}
+                          textAnchor="middle"
+                          fontSize="11"
+                          fill="#065f46"
+                          fontWeight="bold"
+                        >
+                          MAP
+                        </text>
+                      </g>
+                    );
+                  })}
               </svg>
             </div>
           </CardContent>
