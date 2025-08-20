@@ -63,7 +63,15 @@ const links = [
       { name: "WMC", href: "/mainpage/solvers/wmc" },
     ],
   },
-  { name: "ML", href: "/mainpage/ml" },
+  {
+    name: "ML",
+    href: "/mainpage/ml",
+    children: [
+      { name: "K-Nearest Neighbours", href: "/mainpage/ml/knearestneighbours" },
+      { name: "Naïve Bayes", href: "/mainpage/ml/naivebayes" },
+      { name: "Neural Networks", href: "/mainpage/ml/neuralnet" },
+    ],
+  },
   {
     name: "Bayesian Learning",
     href: "/mainpage/bayesianlearning",
