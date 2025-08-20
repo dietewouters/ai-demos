@@ -1,4 +1,3 @@
-// ClauseEffects.tsx
 "use client";
 
 import type {
@@ -8,6 +7,69 @@ import type {
   Assignment,
   Literal,
 } from "@/components/solvers/lib/dpll-types";
+import React from "react";
+
+const NEG = "¬";
+
+function literalTruth(varName: string, negated: boolean, asgn: Assignment) {
+  const v = asgn[varName];
+  if (v === undefined) return null; // onbepaald → geen kleur
+  return negated ? !v : v; // true → groen, false → rood
+}
+
+export function ColorizedClause({
+  text,
+  asgn,
+  className,
+}: {
+  text: string;
+  asgn: Assignment;
+  className?: string;
+}) {
+  // leeg/□ gewoon tonen
+  if (text.includes("□")) return <span className={className}>{text}</span>;
+
+  const trimmed = text.trim();
+  const hadParens = /^\(.*\)$/.test(trimmed);
+  const inner = hadParens ? trimmed.slice(1, -1).trim() : trimmed;
+
+  // splits op unicode ∨ of ascii " v "
+  const parts = inner
+    .split(/∨|(\s+v\s+)/i)
+    .filter((p) => p && !/^\s+v\s+$/i.test(p))
+    .map((p) => p.trim());
+
+  return (
+    <span className={className}>
+      {hadParens && "("}
+      <span>
+        {parts.map((p, i) => {
+          const neg = p.startsWith(NEG);
+          const name = neg ? p.slice(1).trim() : p;
+          const truth = literalTruth(name, neg, asgn);
+
+          const color =
+            truth === true
+              ? "text-green-600 font-semibold"
+              : truth === false
+              ? "text-red-600 font-semibold"
+              : "";
+
+          return (
+            <React.Fragment key={`${i}-${p}`}>
+              {i > 0 && <span className="mx-1">∨</span>}
+              <span className={color}>
+                {neg && NEG}
+                {name}
+              </span>
+            </React.Fragment>
+          );
+        })}
+      </span>
+      {hadParens && ")"}
+    </span>
+  );
+}
 
 function litToString(v: string, neg: boolean) {
   return (neg ? "¬" : "") + v;
@@ -20,11 +82,12 @@ function clauseToString(c: Clause): string {
 
 function diffAssignments(
   parent: Assignment | undefined,
-  current: Assignment
+  current?: Assignment
 ): Array<[string, boolean]> {
   const out: Array<[string, boolean]> = [];
   const p = parent ?? {};
-  for (const [k, v] of Object.entries(current)) {
+  const c = current ?? {};
+  for (const [k, v] of Object.entries(c)) {
     if (v === undefined) continue;
     if (p[k] === undefined || p[k] !== v) out.push([k, v as boolean]);
   }
@@ -99,33 +162,39 @@ export function ClauseEffects({
     ? tree.steps.get(currentStep.parentId)
     : undefined;
 
-  // Basisformule robuust bepalen en normaliseren naar Clause[]
+  // huidige (deel)toekenning ophalen; val terug op lege map
+  const step = tree.steps.get(activeStepId);
+  const assignment = ((step as any)?.assignment ??
+    (step as any)?.valuation ??
+    (step as any)?.model ??
+    (step as any)?.env ??
+    {}) as Record<string, boolean | undefined>;
+
+  // Basisformule bepalen en normaliseren naar Clause[]
   const baseFormulaRaw =
-    currentStep.inputFormula ??
-    parent?.inputFormula ??
-    parent?.formula ??
-    currentStep.formula;
+    (currentStep as any).inputFormula ??
+    (parent as any)?.inputFormula ??
+    (parent as any)?.formula ??
+    (currentStep as any).formula;
 
   const clauses: Clause[] = Array.isArray(baseFormulaRaw)
     ? (baseFormulaRaw as Clause[])
     : baseFormulaRaw?.clauses ?? [];
 
-  // Delta bepalen
+  // Delta (welke variabelen in deze stap gezet/geflipd zijn)
   let delta: Array<[string, boolean]> =
     currentStep.deltaApplied?.map(({ variable, value }) => [variable, value]) ??
     [];
 
   if (delta.length === 0) {
-    delta = diffAssignments(parent?.assignment, currentStep.assignment);
+    delta = diffAssignments(
+      (parent as any)?.assignment,
+      (currentStep as any).assignment
+    );
   }
   if (delta.length === 0) {
     delta = buildFallbackDelta(currentStep);
   }
-
-  const appliedText =
-    delta.length > 0
-      ? delta.map(([v, val]) => `${v}=${val ? "1" : "0"}`).join(", ")
-      : "(No new allocation in this step)";
 
   const rows = clauses.map((cl) => {
     const before = clauseToString(cl);
@@ -140,16 +209,14 @@ export function ClauseEffects({
 
   return (
     <div className="pt-2">
-      <h4 className="font-medium text-sm mb-1"></h4>
-
       {rows.length === 0 ? (
         <div className="text-xs text-muted-foreground">(No clauses)</div>
       ) : (
         <div className="space-y-1">
           {rows.map((r, i) => (
             <div key={i} className="text-xs font-mono">
-              <span>{r.before}</span>{" "}
-              <span className="text-muted-foreground">{r.note}</span>
+              <ColorizedClause text={r.before} asgn={assignment} />
+              &nbsp;<span className="text-muted-foreground">{r.note}</span>
             </div>
           ))}
         </div>
