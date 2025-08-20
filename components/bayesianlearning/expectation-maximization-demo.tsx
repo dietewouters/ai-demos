@@ -165,9 +165,10 @@ function DataTable({
   selectedRow: number | null;
   selectedParameter: string | null;
 }) {
-  // Build expanded rows per data row using expectations
-  const expandedData: ExpandedDataPoint[] = [];
+  const isInitial = currentStep === "ready";
 
+  // Build expanded rows per data row using expectations (zoals je had)
+  const expandedData: ExpandedDataPoint[] = [];
   data.forEach((point, rowIndex) => {
     const missingF = point.f === undefined;
     const missingT1 = point.t1 === undefined;
@@ -185,121 +186,139 @@ function DataTable({
         missing_t1: false,
         missing_t2: false,
       });
-    } else if (!missingF && !missingT1 && missingT2 && exp && exp.length >= 2) {
-      // Only T2 missing → two branches
-      expandedData.push({
-        f: point.f!,
-        t1: point.t1!,
-        t2: 1,
-        weight: exp[0],
-        source_row: rowIndex + 1,
-        missing_t2: true,
-      });
-      expandedData.push({
-        f: point.f!,
-        t1: point.t1!,
-        t2: 0,
-        weight: exp[1],
-        source_row: rowIndex + 1,
-        missing_t2: true,
-      });
-    } else if (!missingF && missingT1 && !missingT2 && exp && exp.length >= 2) {
-      // Only T1 missing → two branches
-      expandedData.push({
-        f: point.f!,
-        t1: 1,
-        t2: point.t2!,
-        weight: exp[0],
-        source_row: rowIndex + 1,
-        missing_t1: true,
-      });
-      expandedData.push({
-        f: point.f!,
-        t1: 0,
-        t2: point.t2!,
-        weight: exp[1],
-        source_row: rowIndex + 1,
-        missing_t1: true,
-      });
-    } else if (missingF && !missingT1 && !missingT2 && exp && exp.length >= 2) {
-      // Only F missing → two branches
-      expandedData.push({
-        f: 1,
-        t1: point.t1!,
-        t2: point.t2!,
-        weight: exp[0],
-        source_row: rowIndex + 1,
-        missing_f: true,
-      });
-      expandedData.push({
-        f: 0,
-        t1: point.t1!,
-        t2: point.t2!,
-        weight: exp[1],
-        source_row: rowIndex + 1,
-        missing_f: true,
-      });
-    } else if (missingF && missingT1 && !missingT2 && exp && exp.length >= 4) {
-      // F and T1 missing → four branches using *joint* weights
-      expandedData.push({
-        f: 1,
-        t1: 1,
-        t2: point.t2!,
-        weight: exp[0],
-        source_row: rowIndex + 1,
-        missing_f: true,
-        missing_t1: true,
-      });
-      expandedData.push({
-        f: 1,
-        t1: 0,
-        t2: point.t2!,
-        weight: exp[1],
-        source_row: rowIndex + 1,
-        missing_f: true,
-        missing_t1: true,
-      });
-      expandedData.push({
-        f: 0,
-        t1: 1,
-        t2: point.t2!,
-        weight: exp[2],
-        source_row: rowIndex + 1,
-        missing_f: true,
-        missing_t1: true,
-      });
-      expandedData.push({
-        f: 0,
-        t1: 0,
-        t2: point.t2!,
-        weight: exp[3],
-        source_row: rowIndex + 1,
-        missing_f: true,
-        missing_t1: true,
-      });
+    } else if (!isInitial) {
+      // Alleen tijdens/na E-stap vertakken; in de beginweergave NIET expanden
+      if (!missingF && !missingT1 && missingT2 && exp && exp.length >= 2) {
+        expandedData.push({
+          f: point.f!,
+          t1: point.t1!,
+          t2: 1,
+          weight: exp[0],
+          source_row: rowIndex + 1,
+          missing_t2: true,
+        });
+        expandedData.push({
+          f: point.f!,
+          t1: point.t1!,
+          t2: 0,
+          weight: exp[1],
+          source_row: rowIndex + 1,
+          missing_t2: true,
+        });
+      } else if (
+        !missingF &&
+        missingT1 &&
+        !missingT2 &&
+        exp &&
+        exp.length >= 2
+      ) {
+        expandedData.push({
+          f: point.f!,
+          t1: 1,
+          t2: point.t2!,
+          weight: exp[0],
+          source_row: rowIndex + 1,
+          missing_t1: true,
+        });
+        expandedData.push({
+          f: point.f!,
+          t1: 0,
+          t2: point.t2!,
+          weight: exp[1],
+          source_row: rowIndex + 1,
+          missing_t1: true,
+        });
+      } else if (
+        missingF &&
+        !missingT1 &&
+        !missingT2 &&
+        exp &&
+        exp.length >= 2
+      ) {
+        expandedData.push({
+          f: 1,
+          t1: point.t1!,
+          t2: point.t2!,
+          weight: exp[0],
+          source_row: rowIndex + 1,
+          missing_f: true,
+        });
+        expandedData.push({
+          f: 0,
+          t1: point.t1!,
+          t2: point.t2!,
+          weight: exp[1],
+          source_row: rowIndex + 1,
+          missing_f: true,
+        });
+      } else if (
+        missingF &&
+        missingT1 &&
+        !missingT2 &&
+        exp &&
+        exp.length >= 4
+      ) {
+        expandedData.push({
+          f: 1,
+          t1: 1,
+          t2: point.t2!,
+          weight: exp[0],
+          source_row: rowIndex + 1,
+          missing_f: true,
+          missing_t1: true,
+        });
+        expandedData.push({
+          f: 1,
+          t1: 0,
+          t2: point.t2!,
+          weight: exp[1],
+          source_row: rowIndex + 1,
+          missing_f: true,
+          missing_t1: true,
+        });
+        expandedData.push({
+          f: 0,
+          t1: 1,
+          t2: point.t2!,
+          weight: exp[2],
+          source_row: rowIndex + 1,
+          missing_f: true,
+          missing_t1: true,
+        });
+        expandedData.push({
+          f: 0,
+          t1: 0,
+          t2: point.t2!,
+          weight: exp[3],
+          source_row: rowIndex + 1,
+          missing_f: true,
+          missing_t1: true,
+        });
+      }
     }
   });
 
+  // BEGIN: stijl/highlight ongewijzigd
   const styleMap: Record<string, { fill: string; outline: string }> = {
     theta_f: {
       fill: "bg-green-100",
-      outline: "outline outline-2 outline-green-500",
+      outline: "outline outline-2 outline-yellow-200",
     },
     theta_t1_f1: {
       fill: "bg-blue-100",
-      outline: "outline outline-2 outline-blue-500",
+      outline: "outline outline-2 outline-purple-400",
     },
     theta_t1_f0: {
       fill: "bg-purple-100",
-      outline: "outline outline-2 outline-purple-500",
+      outline: "outline outline-2 outline-blue-400",
     },
     theta_t2_f1: {
       fill: "bg-orange-100",
-      outline: "outline outline-2 outline-orange-500",
+      outline: "outline outline-2 outline-red-300",
     },
     theta_t2_f0: {
       fill: "bg-red-100",
-      outline: "outline outline-2 outline-red-500",
+      outline: "outline outline-2 outline-purple-300",
     },
   };
 
@@ -312,7 +331,7 @@ function DataTable({
     switch (selectedParameter) {
       case "theta_f":
         inNum = hasW && row.f === 1;
-        inDen = hasW; // outline op alle gewogen rijen (verdeelt N visueel over branches)
+        inDen = hasW;
         break;
       case "theta_t1_f1":
         inNum = hasW && row.f === 1 && row.t1 === 1;
@@ -361,9 +380,35 @@ function DataTable({
     }
     return <>1</>;
   };
+  // END: stijl/highlight ongewijzigd
+
+  // helper om ontbrekende waarden als '?' te tonen
+  const show = (v?: number) => (v === undefined ? "?" : String(v));
+
+  // In de 'ready' view tonen we de originele rijen 1-op-1 (geen expansion)
+  const initialRows: ExpandedDataPoint[] = data.map((p, idx) => ({
+    f: p.f ?? 0,
+    t1: p.t1 ?? 0,
+    t2: p.t2 ?? 0,
+    weight: 0, // niet gebruikt in initiale render
+    source_row: idx + 1,
+    missing_f: p.f === undefined,
+    missing_t1: p.t1 === undefined,
+    missing_t2: p.t2 === undefined,
+  }));
+
+  const rowsToRender = isInitial ? initialRows : expandedData;
 
   return (
     <div className="overflow-x-auto">
+      {isInitial && (
+        <div className="mb-2 text-xs text-gray-600">
+          <span className="inline-block mr-3">
+            Legenda: <strong>positief = 1</strong>, negatief = 0,{" "}
+            <strong>?</strong> = ontbrekend
+          </span>
+        </div>
+      )}
       <table className="w-full border-collapse border border-gray-300 text-sm">
         <thead>
           <tr className="bg-gray-100">
@@ -375,8 +420,14 @@ function DataTable({
           </tr>
         </thead>
         <tbody>
-          {expandedData.map((row, idx) => {
+          {rowsToRender.map((row, idx) => {
             const originalRowIndex = row.source_row - 1;
+            const hasMissing = !!(
+              row.missing_f ||
+              row.missing_t1 ||
+              row.missing_t2
+            );
+
             return (
               <tr
                 key={idx}
@@ -390,35 +441,45 @@ function DataTable({
                 <td className="border border-gray-300 px-3 py-2 text-center font-semibold">
                   {row.source_row}
                 </td>
+
                 <td
                   className={`border border-gray-300 px-3 py-2 text-center font-mono ${
                     row.missing_f ? "font-bold" : ""
                   }`}
                 >
-                  {row.f}
+                  {isInitial ? (row.missing_f ? "?" : row.f) : row.f}
                 </td>
+
                 <td
                   className={`border border-gray-300 px-3 py-2 text-center font-mono ${
                     row.missing_t1 ? "font-bold" : ""
                   }`}
                 >
-                  {row.t1}
+                  {isInitial ? (row.missing_t1 ? "?" : row.t1) : row.t1}
                 </td>
+
                 <td
                   className={`border border-gray-300 px-3 py-2 text-center font-mono ${
                     row.missing_t2 ? "font-bold" : ""
                   }`}
                 >
-                  {row.t2}
+                  {isInitial ? (row.missing_t2 ? "?" : row.t2) : row.t2}
                 </td>
+
                 <td className="border border-gray-300 px-3 py-2 text-center">
                   <div className="space-y-1">
                     <div className="font-mono text-xs">
-                      {row.weight.toFixed(3)}
+                      {isInitial
+                        ? hasMissing
+                          ? "—"
+                          : "1"
+                        : row.weight.toFixed(3)}
                     </div>
-                    <div className="text-xs text-gray-700">
-                      {weightLabel(row)}
-                    </div>
+                    {!isInitial && (
+                      <div className="text-xs text-gray-700">
+                        {weightLabel(row)}
+                      </div>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -426,8 +487,11 @@ function DataTable({
           })}
         </tbody>
       </table>
+
       <p className="text-xs text-gray-600 mt-2">
-        💡 Click on a row to see the E-step details.
+        {isInitial
+          ? "Click on ‘Run E-Step’ to calculate weights."
+          : "💡 Click on a row to see the E-step details."}
       </p>
     </div>
   );
@@ -558,7 +622,7 @@ function RowCalculationDetails({
                 <div className="space-y-2 text-sm font-mono bg-white p-3 rounded border">
                   <div>
                     <Q i={selectedRow + 1}>t₁=1</Q> = P(t₁=1|f={point.f}) = θ
-                    <sub>10</sub>
+                    <sub>t10</sub>
                   </div>
                   <div className="border-2 border-purple-400 p-2 rounded bg-purple-50">
                     <div>
@@ -583,7 +647,7 @@ function RowCalculationDetails({
                 <div className="space-y-2 text-sm font-mono bg-white p-3 rounded border">
                   <div>
                     <Q i={selectedRow + 1}>t₂=1</Q> = P(t₂=1|f={point.f}) = θ
-                    <sub>21</sub>
+                    <sub>t21</sub>
                   </div>
                   <div className="border-2 border-green-400 p-2 rounded bg-green-50">
                     <div>
@@ -908,7 +972,7 @@ function MathFormulas({
                 }
               >
                 <div className="font-mono font-bold text-blue-700 text-lg mb-2">
-                  θ₁₁ = (Σ<sup>i</sup>{" "}
+                  θ<sub>t11</sub> = (Σ<sup>i</sup>{" "}
                   <span className="font-serif italic">q</span>
                   <sup>i</sup>(f=1,t₁=1)) / (Σ<sup>i</sup>{" "}
                   <span className="font-serif italic">q</span>
@@ -919,7 +983,7 @@ function MathFormulas({
                   = {m.denom_f1.toFixed(3)}
                 </div>
                 <div className="mt-1 text-lg font-bold text-blue-700">
-                  θ₁₁ = {m.theta_t1_f1.toFixed(3)}
+                  θ<sub>t11</sub> = {m.theta_t1_f1.toFixed(3)}
                 </div>
               </div>
 
@@ -937,7 +1001,7 @@ function MathFormulas({
                 }
               >
                 <div className="font-mono font-bold text-purple-700 text-lg mb-2">
-                  θ₁₀ = (Σ<sup>i</sup>{" "}
+                  θ<sub>t10</sub> = (Σ<sup>i</sup>{" "}
                   <span className="font-serif italic">q</span>
                   <sup>i</sup>(f=0,t₁=1)) / (Σ<sup>i</sup>{" "}
                   <span className="font-serif italic">q</span>
@@ -948,7 +1012,7 @@ function MathFormulas({
                   = {m.denom_f0.toFixed(3)}
                 </div>
                 <div className="mt-1 text-lg font-bold text-purple-700">
-                  θ₁₀ = {m.theta_t1_f0.toFixed(3)}
+                  θ<sub>t10</sub> = {m.theta_t1_f0.toFixed(3)}
                 </div>
               </div>
 
@@ -966,7 +1030,7 @@ function MathFormulas({
                 }
               >
                 <div className="font-mono font-bold text-orange-700 text-lg mb-2">
-                  θ₂₁ = (Σ<sup>i</sup>{" "}
+                  θ<sub>t21</sub> = (Σ<sup>i</sup>{" "}
                   <span className="font-serif italic">q</span>
                   <sup>i</sup>(f=1,t₂=1)) / (Σ<sup>i</sup>{" "}
                   <span className="font-serif italic">q</span>
@@ -977,7 +1041,7 @@ function MathFormulas({
                   = {m.denom_f1.toFixed(3)}
                 </div>
                 <div className="mt-1 text-lg font-bold text-orange-700">
-                  θ₂₁ = {m.theta_t2_f1.toFixed(3)}
+                  θ<sub>t21</sub> = {m.theta_t2_f1.toFixed(3)}
                 </div>
               </div>
 
@@ -995,7 +1059,7 @@ function MathFormulas({
                 }
               >
                 <div className="font-mono font-bold text-red-700 text-lg mb-2">
-                  θ₂₀ = (Σ<sup>i</sup>{" "}
+                  θ<sub>t20</sub> = (Σ<sup>i</sup>{" "}
                   <span className="font-serif italic">q</span>
                   <sup>i</sup>(f=0,t₂=1)) / (Σ<sup>i</sup>{" "}
                   <span className="font-serif italic">q</span>
@@ -1006,7 +1070,7 @@ function MathFormulas({
                   = {m.denom_f0.toFixed(3)}
                 </div>
                 <div className="mt-1 text-lg font-bold text-red-700">
-                  θ₂₀ = {m.theta_t2_f0.toFixed(3)}
+                  θ<sub>t20</sub> = {m.theta_t2_f0.toFixed(3)}
                 </div>
               </div>
             </div>
@@ -1243,25 +1307,33 @@ export default function ExpectationMaximizationDemo() {
                   <Badge variant="outline">{params.theta_f.toFixed(3)}</Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span>P(T₁=1|F=1) = θ₁₁</span>
+                  <span>
+                    P(T₁=1|F=1) = θ<sub>t11</sub>
+                  </span>
                   <Badge variant="outline">
                     {params.theta_t1_f1.toFixed(3)}
                   </Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span>P(T₁=1|F=0) = θ₁₀</span>
+                  <span>
+                    P(T₁=1|F=0) = θ<sub>t10</sub>
+                  </span>
                   <Badge variant="outline">
                     {params.theta_t1_f0.toFixed(3)}
                   </Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span>P(T₂=1|F=1) = θ₂₁</span>
+                  <span>
+                    P(T₂=1|F=1) = θ<sub>t21</sub>
+                  </span>
                   <Badge variant="outline">
                     {params.theta_t2_f1.toFixed(3)}
                   </Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span>P(T₂=1|F=0) = θ₂₀</span>
+                  <span>
+                    P(T₂=1|F=0) = θ<sub>t20</sub>
+                  </span>
                   <Badge variant="outline">
                     {params.theta_t2_f0.toFixed(3)}
                   </Badge>
