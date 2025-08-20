@@ -284,6 +284,18 @@ export function WMCDemo() {
     { label: ")", insert: ")", title: "Close bracket" },
   ];
 
+  const maxModelWeight = useMemo(
+    () =>
+      rows.reduce(
+        (m: number, r: any) => (r.isModel ? Math.max(m, r.weight) : m),
+        0
+      ),
+    [rows]
+  );
+  const GREEN = [110, 231, 183]; // Tailwind emerald-300
+  const MIN_ALPHA = 0.12; // minimum zichtbaarheid
+  const MAX_ALPHA = 0.5; // was ~0.9 → nu veel lichter
+
   return (
     <div className="flex h-screen bg-background">
       {/* Controls */}
@@ -474,25 +486,59 @@ export function WMCDemo() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((r, idx) => (
-                    <TableRow key={idx}>
-                      {variables.map((v) => (
-                        <TableCell key={v} className="text-center">
-                          {r.a[v] ? 1 : 0}
+                  {rows.map((r, idx) => {
+                    const ratio =
+                      r.isModel && maxModelWeight > 0
+                        ? r.weight / maxModelWeight
+                        : 0;
+
+                    // lineaire schaal naar MAX_ALPHA, ondergrens = MIN_ALPHA
+                    const alpha =
+                      r.isModel && ratio > 0
+                        ? Math.max(
+                            MIN_ALPHA,
+                            Math.min(MAX_ALPHA, ratio * MAX_ALPHA)
+                          )
+                        : 0;
+                    const rowStyle = r.isModel
+                      ? { backgroundColor: `rgba(16,185,129,${alpha})` }
+                      : undefined;
+
+                    return (
+                      <TableRow
+                        key={idx}
+                        style={rowStyle}
+                        className={r.isModel ? "transition-colors" : undefined}
+                      >
+                        {variables.map((v) => (
+                          <TableCell key={v} className="text-center">
+                            {r.a[v] ? 1 : 0}
+                          </TableCell>
+                        ))}
+                        <TableCell
+                          className={`text-center font-semibold ${
+                            r.isModel
+                              ? "text-emerald-700"
+                              : "text-muted-foreground"
+                          }`}
+                          title={
+                            r.isModel
+                              ? `model (weight ${numStr(r.weight)})`
+                              : "geen model"
+                          }
+                        >
+                          {r.isModel ? 1 : 0}
                         </TableCell>
-                      ))}
-                      <TableCell className="text-center">
-                        {r.isModel ? 1 : 0}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {r.symExpr} = {r.numExpr} = {numStr(r.weight)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {numStr(r.contrib)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {/* ⬇️ Totals row */}
+                        <TableCell className="font-mono text-xs">
+                          {r.symExpr} = {r.numExpr} = {numStr(r.weight)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {numStr(r.contrib)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {/* totals row ongewijzigd */}
                   <TableRow>
                     {variables.map((v) => (
                       <TableCell key={v} className="border-t" />
