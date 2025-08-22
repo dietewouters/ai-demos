@@ -288,7 +288,6 @@ export default function KNNDemo() {
               <SelectContent>
                 <SelectItem value="euclidean">Euclidean</SelectItem>
                 <SelectItem value="manhattan">Manhattan</SelectItem>
-                <SelectItem value="minkowski">Choose p</SelectItem>
               </SelectContent>
             </Select>
 
