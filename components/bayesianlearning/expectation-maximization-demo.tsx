@@ -532,534 +532,472 @@ function QFunctionsPanel({
   params,
   expectations,
   currentStep,
-  selectedQRow,
-  setSelectedQRow,
 }: {
   data: DataPoint[];
   params: BayesianParams;
   expectations: number[][];
   currentStep: string;
-  selectedQRow: number | null;
-  setSelectedQRow: (idx: number | null) => void;
 }) {
+  const isAfterE = currentStep !== "ready";
   const fmt = (x: number, d = 6) =>
     Number.isFinite(x) ? x.toFixed(d) : String(x);
-  const isAfterE = currentStep !== "ready";
+
+  // Kleine helper die eruitziet zoals de M-step Box
+  const EBox = ({
+    title,
+    num,
+    den,
+    rhs,
+    value,
+  }: {
+    title: ReactNode; // linkerkant, bv. q^i(t₂=1 | …)
+    num?: ReactNode; // teller (optioneel)
+    den?: ReactNode; // noemer (optioneel)
+    rhs?: ReactNode; // of direct een rechterlid (ipv breuk)
+    value?: number; // numerieke uitkomst (optioneel)
+  }) => (
+    <div className="border-2 p-4 rounded bg-white">
+      <div className="font-mono text-lg mb-2">
+        {title} ={" "}
+        {num && den ? (
+          <Frac num={num} den={den} className="align-middle" />
+        ) : (
+          rhs
+        )}
+      </div>
+      {typeof value === "number" && (
+        <div className="mt-1 text-lg font-bold">= {value.toFixed(6)}</div>
+      )}
+    </div>
+  );
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Q-functions (E-step)</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+
+      <CardContent className="space-y-6">
         {data.map((p, i) => {
           const idx = i + 1;
+          const e = expectations[i] || [];
+
           const missingF = p.f === undefined;
           const missingT1 = p.t1 === undefined;
           const missingT2 = p.t2 === undefined;
-          const e = expectations[i] || [];
-          let label: ReactNode = null;
-          let details: ReactNode = null;
 
-          if (!missingF && !missingT1 && missingT2) {
-            label = (
-              <>
-                <Q i={idx}>
-                  t₂ | f={p.f}, t₁={p.t1}
-                </Q>
-              </>
-            );
-
-            const ThetaT2_1 =
-              p.f === 1 ? (
-                <span>
-                  θ<sub>t21</sub>
-                </span>
-              ) : (
-                <span>
-                  θ<sub>t20</sub>
-                </span>
-              );
-            const ThetaT2_0 =
-              p.f === 1 ? (
-                <span>
-                  (1−θ<sub>t21</sub>)
-                </span>
-              ) : (
-                <span>
-                  (1−θ<sub>t20</sub>)
-                </span>
-              );
-
-            details = (
-              <div className="space-y-3">
-                {/* Definition as joint / evidence */}
-                <div className="border rounded bg-white p-3 font-mono text-sm">
-                  <div className="font-semibold mb-1">Definition</div>
-                  <div className="flex items-center gap-2">
-                    <span>
-                      q(t₂ | f={p.f}, t₁={p.t1}) =
-                    </span>
-                    <Frac
-                      num={
-                        <>
-                          q(t₂, f={p.f}, t₁={p.t1})
-                        </>
-                      }
-                      den={
-                        <>
-                          ∑<sub>t₂∈&#123;0,1&#125;</sub> P(t₂, f={p.f}, t₁=
-                          {p.t1})
-                        </>
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* Explicit substitution & simplification */}
-                <div className="border rounded bg-white p-3 font-mono text-sm">
-                  <div className="font-semibold mb-1">Derivation</div>
-                  <div>
-                    ={" "}
-                    <Frac
-                      num={
-                        <>
-                          P(f={p.f}) · P(t₁={p.t1} | f={p.f}) · P(t₂ | f={p.f})
-                        </>
-                      }
-                      den={
-                        <>
-                          ∑<sub>t₂∈&#123;0,1&#125;</sub> P(f={p.f}) · P(t₁=
-                          {p.t1} | f={p.f}) · P(t₂ | f={p.f})
-                        </>
-                      }
-                    />
-                  </div>
-                  <div className="mt-1">= P(t₂ | f={p.f})</div>
-                </div>
-
-                {/* Effective probabilities */}
-                <div className="grid gap-2 font-mono text-sm">
-                  <article className="border rounded bg-green-50 p-2">
-                    <header className="font-semibold mb-1">
-                      <Q i={idx}>t₂=1</Q>
-                    </header>
-                    <div>
-                      = P(t₂=1 | f={p.f}) = {ThetaT2_1}
-                    </div>
-                    {isAfterE && e.length >= 2 && (
-                      <div className="text-xs text-gray-700">= {fmt(e[0])}</div>
-                    )}
-                  </article>
-
-                  <article className="border rounded bg-green-50 p-2">
-                    <header className="font-semibold mb-1">
-                      <Q i={idx}>t₂=0</Q>
-                    </header>
-                    <div>
-                      = P(t₂=0 | f={p.f}) = {ThetaT2_0}
-                    </div>
-                    {isAfterE && e.length >= 2 && (
-                      <div className="text-xs text-gray-700">= {fmt(e[1])}</div>
-                    )}
-                  </article>
-                </div>
-              </div>
-            );
-          } else if (!missingF && missingT1 && !missingT2) {
-            label = (
-              <>
-                <Q i={idx}>
-                  t₁ | f={p.f}, t₂={p.t2}
-                </Q>
-              </>
-            );
-
-            const ThetaT1_1 =
-              p.f === 1 ? (
-                <span>
-                  θ<sub>t11</sub>
-                </span>
-              ) : (
-                <span>
-                  θ<sub>t10</sub>
-                </span>
-              );
-            const ThetaT1_0 =
-              p.f === 1 ? (
-                <span>
-                  (1−θ<sub>t11</sub>)
-                </span>
-              ) : (
-                <span>
-                  (1−θ<sub>t10</sub>)
-                </span>
-              );
-
-            details = (
-              <div className="space-y-3">
-                {/* Definition as joint / evidence */}
-                <div className="border rounded bg-white p-3 font-mono text-sm">
-                  <div className="font-semibold mb-1">Definition</div>
-                  <div className="flex items-center gap-2">
-                    <span>
-                      q(t₁ | f={p.f}, t₂={p.t2}) =
-                    </span>
-                    <Frac
-                      num={
-                        <>
-                          P(t₁, f={p.f}, t₂={p.t2})
-                        </>
-                      }
-                      den={
-                        <>
-                          ∑<sub>t₁∈&#123;0,1&#125;</sub> P(t₁, f={p.f}, t₂=
-                          {p.t2})
-                        </>
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* Explicit substitution & simplification */}
-                <div className="border rounded bg-white p-3 font-mono text-sm">
-                  <div className="font-semibold mb-1">Derivation</div>
-                  <div>
-                    ={" "}
-                    <Frac
-                      num={
-                        <>
-                          P(f={p.f}) · P(t₁ | f={p.f}) · P(t₂={p.t2} | f={p.f})
-                        </>
-                      }
-                      den={
-                        <>
-                          ∑<sub>t₁∈&#123;0,1&#125;</sub> P(f={p.f}) · P(t₁ | f=
-                          {p.f}) · P(t₂={p.t2} | f={p.f})
-                        </>
-                      }
-                    />
-                  </div>
-                  <div className="mt-1">= P(t₁ | f={p.f})</div>
-                </div>
-
-                {/* Effective probabilities */}
-                <div className="grid gap-2 font-mono text-sm">
-                  <article className="border rounded bg-purple-50 p-2">
-                    <header className="font-semibold mb-1">
-                      <Q i={idx}>t₁=1</Q>
-                    </header>
-                    <div>
-                      = P(t₁=1 | f={p.f}) = {ThetaT1_1}
-                    </div>
-                    {isAfterE && e.length >= 2 && (
-                      <div className="text-xs text-gray-700">= {fmt(e[0])}</div>
-                    )}
-                  </article>
-
-                  <article className="border rounded bg-purple-50 p-2">
-                    <header className="font-semibold mb-1">
-                      <Q i={idx}>t₁=0</Q>
-                    </header>
-                    <div>
-                      = P(t₁=0 | f={p.f}) = {ThetaT1_0}
-                    </div>
-                    {isAfterE && e.length >= 2 && (
-                      <div className="text-xs text-gray-700">= {fmt(e[1])}</div>
-                    )}
-                  </article>
-                </div>
-              </div>
-            );
-          } else if (missingF && !missingT1 && !missingT2) {
-            label = (
-              <>
-                <Q i={idx}>
-                  <i>f</i>=1
-                </Q>{" "}
-                = P(f=1 | t₁={p.t1}, t₂={p.t2})
-              </>
-            );
-
-            const num = (
+          // handige symbolische stukjes
+          const T1_f1 =
+            p.t1 === 1 ? (
               <span>
-                θ<sub>f</sub> ·{" "}
-                {p.t1 === 1 ? (
-                  <span>
-                    θ<sub>t11</sub>
-                  </span>
-                ) : (
-                  <span>
-                    (1−θ<sub>t11</sub>)
-                  </span>
-                )}{" "}
-                ·{" "}
-                {p.t2 === 1 ? (
-                  <span>
-                    θ<sub>t21</sub>
-                  </span>
-                ) : (
-                  <span>
-                    (1−θ<sub>t21</sub>)
-                  </span>
-                )}
+                θ<sub>t11</sub>
+              </span>
+            ) : (
+              <span>
+                (1−θ<sub>t11</sub>)
+              </span>
+            );
+          const T1_f0 =
+            p.t1 === 1 ? (
+              <span>
+                θ<sub>t10</sub>
+              </span>
+            ) : (
+              <span>
+                (1−θ<sub>t10</sub>)
+              </span>
+            );
+          const T2_f1 =
+            p.t2 === 1 ? (
+              <span>
+                θ<sub>t21</sub>
+              </span>
+            ) : (
+              <span>
+                (1−θ<sub>t21</sub>)
+              </span>
+            );
+          const T2_f0 =
+            p.t2 === 1 ? (
+              <span>
+                θ<sub>t20</sub>
+              </span>
+            ) : (
+              <span>
+                (1−θ<sub>t20</sub>)
               </span>
             );
 
-            const den = (
-              <span>
-                θ<sub>f</sub>·
-                {p.t1 === 1 ? (
-                  <span>
-                    θ<sub>t11</sub>
-                  </span>
-                ) : (
-                  <span>
-                    (1−θ<sub>t11</sub>)
-                  </span>
-                )}
-                ·
-                {p.t2 === 1 ? (
-                  <span>
-                    θ<sub>t21</sub>
-                  </span>
-                ) : (
-                  <span>
-                    (1−θ<sub>t21</sub>)
-                  </span>
-                )}{" "}
-                + (1−θ<sub>f</sub>)·
-                {p.t1 === 1 ? (
-                  <span>
-                    θ<sub>t10</sub>
-                  </span>
-                ) : (
-                  <span>
-                    (1−θ<sub>t10</sub>)
-                  </span>
-                )}
-                ·
-                {p.t2 === 1 ? (
-                  <span>
-                    θ<sub>t20</sub>
-                  </span>
-                ) : (
-                  <span>
-                    (1−θ<sub>t20</sub>)
-                  </span>
-                )}
-              </span>
-            );
-
-            details = (
-              <div className="text-sm">
-                <Frac num={num} den={den} />
-                {isAfterE && e.length >= 2 && (
-                  <div className="text-xs text-gray-700 mt-1">
-                    Numeriek: {fmt(e[0])} en {fmt(e[1])}
-                  </div>
-                )}
-              </div>
-            );
-          } else if (missingF && missingT1 && !missingT2) {
-            label = (
-              <>
-                <Q i={idx}>f,t₁ | t₂={p.t2}</Q>
-              </>
-            );
-
-            // symbolic pieces used in the explanation
-            const T2f1Sym =
-              p.t2 === 1 ? (
-                <span>
-                  θ<sub>t21</sub>
-                </span>
-              ) : (
-                <span>
-                  (1−θ<sub>t21</sub>)
-                </span>
-              );
-            const T2f0Sym =
-              p.t2 === 1 ? (
-                <span>
-                  θ<sub>t20</sub>
-                </span>
-              ) : (
-                <span>
-                  (1−θ<sub>t20</sub>)
-                </span>
-              );
-            const DenSym = (
-              <span>
-                θ<sub>f</sub>·{T2f1Sym} + (1−θ<sub>f</sub>)·{T2f0Sym}
-              </span>
-            );
-
-            // numeric values with current θ
-            const tf = params.theta_f;
-            const t11 = params.theta_t1_f1;
-            const t10 = params.theta_t1_f0;
-            const t2f1 =
-              p.t2 === 1 ? params.theta_t2_f1 : 1 - params.theta_t2_f1;
-            const t2f0 =
-              p.t2 === 1 ? params.theta_t2_f0 : 1 - params.theta_t2_f0;
-
-            // joint numerators for each (f,t1)
-            const num11 = tf * t11 * t2f1; // P(f=1,t1=1,t2=obs)
-            const num10 = tf * (1 - t11) * t2f1; // P(f=1,t1=0,t2=obs)
-            const num01 = (1 - tf) * t10 * t2f0; // P(f=0,t1=1,t2=obs)
-            const num00 = (1 - tf) * (1 - t10) * t2f0; // P(f=0,t1=0,t2=obs)
-            const Z = num11 + num10 + num01 + num00; // P(t2=obs)
-
-            const showNums = isAfterE && e.length >= 4;
-
-            details = (
-              <div className="space-y-3 text-sm">
-                {/* 1) Main definition first */}
-                <div className="border rounded bg-white p-3 font-mono">
-                  <div className="font-semibold mb-1">Definition</div>
-                  <div className="flex items-center gap-2">
-                    <span>P(f,t₁ | t₂={p.t2}) =</span>
-                    <Frac
-                      num={<>P(f,t₁,t₂={p.t2})</>}
-                      den={<>P(t₂={p.t2})</>}
-                    />
-                  </div>
-                  <div className="text-xs text-gray-600 mt-1">
-                    This is Bayes: joint / evidence.
-                  </div>
-                </div>
-
-                {/* 2) Why the numerator? */}
-                <div className="border rounded bg-white p-3 font-mono">
-                  <div>
-                    The numerator is the <strong>joint</strong> probability
-                    P(f,t₁,t₂={p.t2}). Using independence given f: p(f,t₁,t₂) =
-                    p(f)·p(t₁|f)·p(t₂|f)
-                  </div>
-                  <ul className="list-disc pl-5 mt-2 space-y-1">
-                    <li>
-                      N₁₁ = P(f=1,t₁=1,t₂={p.t2}) = θ<sub>f</sub>·θ
-                      <sub>t11</sub>·{T2f1Sym}
-                      {showNums && <> = {fmt(num11)}</>}
-                    </li>
-                    <li>
-                      N₁₀ = P(f=1,t₁=0,t₂={p.t2}) = θ<sub>f</sub>·(1−θ
-                      <sub>t11</sub>)·{T2f1Sym}
-                      {showNums && <> = {fmt(num10)}</>}
-                    </li>
-                    <li>
-                      N₀₁ = P(f=0,t₁=1,t₂={p.t2}) = (1−θ<sub>f</sub>)·θ
-                      <sub>t10</sub>·{T2f0Sym}
-                      {showNums && <> = {fmt(num01)}</>}
-                    </li>
-                    <li>
-                      N₀₀ = P(f=0,t₁=0,t₂={p.t2}) = (1−θ<sub>f</sub>)·(1−θ
-                      <sub>t10</sub>)·{T2f0Sym}
-                      {showNums && <> = {fmt(num00)}</>}
-                    </li>
-                  </ul>
-                </div>
-
-                {/* 3) Why the denominator (evidence)? */}
-                <div className="border rounded bg-white p-3 font-mono">
-                  <div>
-                    The denominator is the <strong>evidence</strong>: P(t₂=
-                    {p.t2}) = Σ<sub>f,t₁</sub> P(f,t₁,t₂={p.t2}) = N₁₁ + N₁₀ +
-                    N₀₁ + N₀₀.
-                  </div>
-                </div>
-
-                {/* 4) The four posteriors */}
-                <div className="grid gap-2 font-mono">
-                  <article className="border rounded bg-orange-50 p-2">
-                    <header className="font-semibold mb-1">
-                      <Q i={idx}>
-                        <em>f</em>=1, t₁=1
-                      </Q>
-                    </header>
-                    <div>
-                      <Frac num={<>N₁₁</>} den={<>Z</>} />
-                    </div>
-                    {showNums && (
-                      <div className="text-xs text-gray-700 mt-1">
-                        = {fmt(num11)} / {fmt(Z)} ⇒ {fmt(e[0])}
-                      </div>
-                    )}
-                  </article>
-
-                  <article className="border rounded bg-orange-50 p-2">
-                    <header className="font-semibold mb-1">
-                      <Q i={idx}>
-                        <em>f</em>=1, t₁=0
-                      </Q>
-                    </header>
-                    <div>
-                      <Frac num={<>N₁₀</>} den={<>Z</>} />
-                    </div>
-                    {showNums && (
-                      <div className="text-xs text-gray-700 mt-1">
-                        = {fmt(num10)} / {fmt(Z)} ⇒ {fmt(e[1])}
-                      </div>
-                    )}
-                  </article>
-
-                  <article className="border rounded bg-orange-50 p-2">
-                    <header className="font-semibold mb-1">
-                      <Q i={idx}>
-                        <em>f</em>=0, t₁=1
-                      </Q>
-                    </header>
-                    <div>
-                      <Frac num={<>N₀₁</>} den={<>Z</>} />
-                    </div>
-                    {showNums && (
-                      <div className="text-xs text-gray-700 mt-1">
-                        = {fmt(num01)} / {fmt(Z)} ⇒ {fmt(e[2])}
-                      </div>
-                    )}
-                  </article>
-
-                  <article className="border rounded bg-orange-50 p-2">
-                    <header className="font-semibold mb-1">
-                      <Q i={idx}>
-                        <em>f</em>=0, t₁=0
-                      </Q>
-                    </header>
-                    <div>
-                      <Frac num={<>N₀₀</>} den={<>Z</>} />
-                    </div>
-                    {showNums && (
-                      <div className="text-xs text-gray-700 mt-1">
-                        = {fmt(num00)} / {fmt(Z)} ⇒ {fmt(e[3])}
-                      </div>
-                    )}
-                  </article>
-                </div>
-              </div>
-            );
-          } else {
-            label = (
-              <>
-                <Q i={idx}>—</Q> (complete)
-              </>
-            );
-            details = null;
-          }
-
-          const open = selectedQRow === i;
+          const Zsym = (
+            <>
+              θ<sub>f</sub>·{T2_f1} + (1−θ<sub>f</sub>)·{T2_f0}
+            </>
+          );
 
           return (
-            <div key={i} className="border rounded-lg p-3 bg-white">
-              <button
-                className="w-full text-left"
-                onClick={() => setSelectedQRow(open ? null : i)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm">{label}</div>
+            <section key={i} className="space-y-3">
+              <div className="text-xs text-gray-500">row {idx}</div>
+
+              {/* t2 ontbreekt (triviaal, 2 weights) */}
+              {!missingF && !missingT1 && missingT2 && (
+                <div className="space-y-3">
+                  {/* kleine derivatie-box in dezelfde stijlfamilie */}
+                  <div className="border rounded bg-slate-50 p-3 font-mono text-sm">
+                    <div className="font-semibold mb-1">Derivation</div>
+                    <div className="flex items-center gap-2">
+                      <span>
+                        q<sup>{idx}</sup>(t₂ | f={p.f}, t₁={p.t1}) =
+                      </span>
+                      <Frac
+                        num={
+                          <>
+                            P(t₂, f={p.f}, t₁={p.t1})
+                          </>
+                        }
+                        den={
+                          <>
+                            ∑<sub>t₂∈&#123;0,1&#125;</sub> P(t₂, f={p.f}, t₁=
+                            {p.t1})
+                          </>
+                        }
+                      />
+                    </div>
+                    <div className="mt-1">
+                      ={" "}
+                      <Frac
+                        num={
+                          <>
+                            P(f={p.f})·P(t₁={p.t1}|f={p.f})·P(t₂|f={p.f})
+                          </>
+                        }
+                        den={
+                          <>
+                            ∑<sub>t₂</sub>
+                            P(f={p.f})·P(t₁={p.t1}|f={p.f})·P(t₂|f={p.f})
+                          </>
+                        }
+                      />{" "}
+                      ⇒ P(t₂ | f={p.f})
+                    </div>
+                  </div>
+
+                  <EBox
+                    title={
+                      <>
+                        <Q i={idx}>
+                          t₂=1 | f={p.f}, t₁={p.t1}
+                        </Q>
+                      </>
+                    }
+                    rhs={
+                      p.f === 1 ? (
+                        <>
+                          θ<sub>t21</sub>
+                        </>
+                      ) : (
+                        <>
+                          θ<sub>t20</sub>
+                        </>
+                      )
+                    }
+                    value={isAfterE && e.length >= 2 ? e[0] : undefined}
+                  />
+                  <EBox
+                    title={
+                      <>
+                        <Q i={idx}>
+                          t₂=0 | f={p.f}, t₁={p.t1}
+                        </Q>
+                      </>
+                    }
+                    rhs={
+                      p.f === 1 ? (
+                        <>
+                          (1−θ<sub>t21</sub>)
+                        </>
+                      ) : (
+                        <>
+                          (1−θ<sub>t20</sub>)
+                        </>
+                      )
+                    }
+                    value={isAfterE && e.length >= 2 ? e[1] : undefined}
+                  />
                 </div>
-              </button>
-              {open && details && <div className="mt-2">{details}</div>}
-            </div>
+              )}
+
+              {/* t1 ontbreekt (triviaal, 2 weights) */}
+              {!missingF && missingT1 && !missingT2 && (
+                <div className="space-y-3">
+                  <div className="border rounded bg-slate-50 p-3 font-mono text-sm">
+                    <div className="font-semibold mb-1">Derivation</div>
+                    <div className="flex items-center gap-2">
+                      <span>
+                        q<sup>{idx}</sup>(t₁ | f={p.f}, t₂={p.t2}) =
+                      </span>
+                      <Frac
+                        num={
+                          <>
+                            P(t₁, f={p.f}, t₂={p.t2})
+                          </>
+                        }
+                        den={
+                          <>
+                            ∑<sub>t₁∈&#123;0,1&#125;</sub> P(t₁, f={p.f}, t₂=
+                            {p.t2})
+                          </>
+                        }
+                      />
+                    </div>
+                    <div className="mt-1">
+                      ={" "}
+                      <Frac
+                        num={
+                          <>
+                            P(f={p.f})·P(t₁|f={p.f})·P(t₂={p.t2}|f={p.f})
+                          </>
+                        }
+                        den={
+                          <>
+                            ∑<sub>t₁</sub>
+                            P(f={p.f})·P(t₁|f={p.f})·P(t₂={p.t2}|f={p.f})
+                          </>
+                        }
+                      />{" "}
+                      ⇒ P(t₁ | f={p.f})
+                    </div>
+                  </div>
+
+                  <EBox
+                    title={
+                      <>
+                        <Q i={idx}>
+                          t₁=1 | f={p.f}, t₂={p.t2}
+                        </Q>
+                      </>
+                    }
+                    rhs={
+                      p.f === 1 ? (
+                        <>
+                          θ<sub>t11</sub>
+                        </>
+                      ) : (
+                        <>
+                          θ<sub>t10</sub>
+                        </>
+                      )
+                    }
+                    value={isAfterE && e.length >= 2 ? e[0] : undefined}
+                  />
+                  <EBox
+                    title={
+                      <>
+                        <Q i={idx}>
+                          t₁=0 | f={p.f}, t₂={p.t2}
+                        </Q>
+                      </>
+                    }
+                    rhs={
+                      p.f === 1 ? (
+                        <>
+                          (1−θ<sub>t11</sub>)
+                        </>
+                      ) : (
+                        <>
+                          (1−θ<sub>t10</sub>)
+                        </>
+                      )
+                    }
+                    value={isAfterE && e.length >= 2 ? e[1] : undefined}
+                  />
+                </div>
+              )}
+
+              {/* f ontbreekt (2 weights, breuk met θ's) */}
+              {missingF && !missingT1 && !missingT2 && (
+                <div className="space-y-3">
+                  <div className="border rounded bg-slate-50 p-3 font-mono text-sm">
+                    <div className="font-semibold mb-1">Definition</div>
+                    <div className="flex items-center gap-2">
+                      <span>
+                        q<sup>{idx}</sup>(f | t₁={p.t1}, t₂={p.t2}) =
+                      </span>
+                      <Frac
+                        num={
+                          <>
+                            P(f, t₁={p.t1}, t₂={p.t2})
+                          </>
+                        }
+                        den={
+                          <>
+                            P(t₁={p.t1}, t₂={p.t2})
+                          </>
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <EBox
+                    title={
+                      <>
+                        <Q i={idx}>
+                          <em>f</em>=1 | t₁={p.t1}, t₂={p.t2}
+                        </Q>
+                      </>
+                    }
+                    num={
+                      <>
+                        θ<sub>f</sub>·{T1_f1}·{T2_f1}
+                      </>
+                    }
+                    den={<>{Zsym}</>}
+                    value={isAfterE && e.length >= 2 ? e[0] : undefined}
+                  />
+
+                  <EBox
+                    title={
+                      <>
+                        <Q i={idx}>
+                          <em>f</em>=0 | t₁={p.t1}, t₂={p.t2}
+                        </Q>
+                      </>
+                    }
+                    num={
+                      <>
+                        (1−θ<sub>f</sub>)·{T1_f0}·{T2_f0}
+                      </>
+                    }
+                    den={<>{Zsym}</>}
+                    value={isAfterE && e.length >= 2 ? e[1] : undefined}
+                  />
+                </div>
+              )}
+
+              {/* f & t1 ontbreken (4 weights, joint) */}
+              {missingF && missingT1 && !missingT2 && (
+                <div className="space-y-3">
+                  {/* Derivation: nu mét extra stap “in functie van P(·)” */}
+                  <div className="border rounded bg-slate-50 p-3 font-mono text-sm">
+                    <div className="font-semibold mb-1">Derivation</div>
+
+                    {/* 1) Bayes */}
+                    <div className="flex items-center gap-2">
+                      <span>
+                        q<sup>{idx}</sup>(f,t₁ | t₂={p.t2}) =
+                      </span>
+                      <Frac
+                        num={<>P(f,t₁,t₂={p.t2})</>}
+                        den={<>P(t₂={p.t2})</>}
+                      />
+                    </div>
+
+                    {/* 2) Factoriseer joint & evidence als som */}
+                    <div className="mt-1">
+                      ={" "}
+                      <Frac
+                        num={<>P(f)·P(t₁|f)·P(t₂={p.t2}|f)</>}
+                        den={
+                          <>
+                            ∑<sub>f,t₁</sub> P(f)·P(t₁|f)·P(t₂={p.t2}|f)
+                          </>
+                        }
+                      />
+                    </div>
+
+                    {/* 3) Evidence expliciet in P-vorm */}
+                    <div className="mt-1">
+                      ={" "}
+                      <Frac
+                        num={<>P(f)·P(t₁|f)·P(t₂={p.t2}|f)</>}
+                        den={
+                          <>
+                            P(t₂={p.t2}|f=1)·P(f=1) + P(t₂={p.t2}|f=0)·P(f=0)
+                          </>
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <EBox
+                    title={
+                      <>
+                        <Q i={idx}>
+                          <em>f</em>=1, t₁=1 | t₂={p.t2}
+                        </Q>
+                      </>
+                    }
+                    num={
+                      <>
+                        θ<sub>f</sub>·θ<sub>t11</sub>·{T2_f1}
+                      </>
+                    }
+                    den={<>{Zsym}</>}
+                    value={isAfterE && e.length >= 4 ? e[0] : undefined}
+                  />
+                  <EBox
+                    title={
+                      <>
+                        <Q i={idx}>
+                          <em>f</em>=1, t₁=0 | t₂={p.t2}
+                        </Q>
+                      </>
+                    }
+                    num={
+                      <>
+                        θ<sub>f</sub>·(1−θ<sub>t11</sub>)·{T2_f1}
+                      </>
+                    }
+                    den={<>{Zsym}</>}
+                    value={isAfterE && e.length >= 4 ? e[1] : undefined}
+                  />
+                  <EBox
+                    title={
+                      <>
+                        <Q i={idx}>
+                          <em>f</em>=0, t₁=1 | t₂={p.t2}
+                        </Q>
+                      </>
+                    }
+                    num={
+                      <>
+                        (1−θ<sub>f</sub>)·θ<sub>t10</sub>·{T2_f0}
+                      </>
+                    }
+                    den={<>{Zsym}</>}
+                    value={isAfterE && e.length >= 4 ? e[2] : undefined}
+                  />
+                  <EBox
+                    title={
+                      <>
+                        <Q i={idx}>
+                          <em>f</em>=0, t₁=0 | t₂={p.t2}
+                        </Q>
+                      </>
+                    }
+                    num={
+                      <>
+                        (1−θ<sub>f</sub>)·(1−θ<sub>t10</sub>)·{T2_f0}
+                      </>
+                    }
+                    den={<>{Zsym}</>}
+                    value={isAfterE && e.length >= 4 ? e[3] : undefined}
+                  />
+                </div>
+              )}
+
+              {/* complete rij */}
+              {!missingF && !missingT1 && !missingT2 && (
+                <EBox
+                  title={
+                    <>
+                      <Q i={idx}>— (complete)</Q>
+                    </>
+                  }
+                  rhs={<>1</>}
+                  value={1}
+                />
+              )}
+            </section>
           );
         })}
       </CardContent>
@@ -1212,6 +1150,19 @@ function MStepPanel({
     value: number;
   }) => {
     const selected = selectedParameter === id;
+
+    // kleur de breukdelen alleen wanneer geselecteerd
+    const coloredNum = selected ? (
+      <span className="text-sky-700 font-semibold">{num}</span>
+    ) : (
+      num
+    );
+    const coloredDen = selected ? (
+      <span className="text-green-700 font-semibold">{den}</span>
+    ) : (
+      den
+    );
+
     return (
       <div
         className={`border-2 p-4 rounded bg-white cursor-pointer transition-all ${
@@ -1222,19 +1173,11 @@ function MStepPanel({
         onClick={() => onParameterSelect(selected ? null : id)}
       >
         <div className="font-mono text-lg mb-2">
-          {title} = <Frac num={num} den={den} className="align-middle" />
+          {title} ={" "}
+          <Frac num={coloredNum} den={coloredDen} className="align-middle" />
         </div>
-
-        <div className="mt-1 text-lg font-bold">= {value.toFixed(3)} </div>
-
-        {isUpdated ? (
-          <p className="text-xs text-gray-600 mt-1">
-            Click to highlight relevant cells in the table (numerator =
-            outlined, denominator = solid colour).
-          </p>
-        ) : (
-          <p className="text-xs text-gray-500 mt-1"></p>
-        )}
+        <div className="mt-1 text-lg font-bold">= {value.toFixed(3)}</div>
+        {/* uitleg weggehaald */}
       </div>
     );
   };
@@ -1598,7 +1541,7 @@ export default function ExpectationMaximizationDemo() {
   const [selectedParameter, setSelectedParameter] = useState<string | null>(
     null
   );
-  const [selectedQRow, setSelectedQRow] = useState<number | null>(null);
+  const [setSelectedQRow] = useState<number | null>(null);
 
   const runEStep = () => {
     setBusy(true);
@@ -1756,7 +1699,6 @@ export default function ExpectationMaximizationDemo() {
     setBusy(false);
     setSelectedRow(null);
     setSelectedParameter(null);
-    setSelectedQRow(null);
   };
   const canRunE =
     !busy && (currentStep === "ready" || currentStep === "m-completed");
@@ -1862,8 +1804,6 @@ export default function ExpectationMaximizationDemo() {
           params={params}
           expectations={expectations}
           currentStep={currentStep}
-          selectedQRow={selectedQRow}
-          setSelectedQRow={setSelectedQRow}
         />
         <MStepPanel
           currentStep={currentStep}

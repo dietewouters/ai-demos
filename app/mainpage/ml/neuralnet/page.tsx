@@ -20,7 +20,7 @@ export default function Home() {
         <span aria-hidden="true">↗</span>
       </a>
 
-      <p className="mt-3 text-sm text-gray-500">Link opens in a new tablet.</p>
+      <p className="mt-3 text-sm text-gray-500">Link opens in a new tab</p>
     </main>
   );
 }
