@@ -15,7 +15,6 @@ function gamma(z: number): number {
   if (z === 1) return 1;
   if (z === 0.5) return Math.sqrt(Math.PI);
   if (z < 1) return gamma(z + 1) / z;
-
   // Stirling's approximation for larger values
   return Math.sqrt((2 * Math.PI) / z) * Math.pow(z / Math.E, z);
 }
@@ -58,18 +57,10 @@ export default function BetaFunctionDemo() {
   const [a, setA] = useState([2]);
   const [b, setB] = useState([2]);
 
-  // Generate curves (reference curves kept for future use)
+  // Curves
   const currentCurve = useMemo(() => generateCurve(a[0], b[0]), [a, b]);
-  const referenceCurves = useMemo(
-    () => ({
-      uniform: generateCurve(1, 1),
-      moderate: generateCurve(2, 2),
-      peaked: generateCurve(5, 5),
-    }),
-    []
-  );
 
-  // Statistics
+  // Stats
   const mean = a[0] / (a[0] + b[0]);
   const variance =
     (a[0] * b[0]) / (Math.pow(a[0] + b[0], 2) * (a[0] + b[0] + 1));
@@ -86,48 +77,39 @@ export default function BetaFunctionDemo() {
     return { kind: "right", xs: [1] };
   }, [a, b]);
 
-  // SVG dimensions
+  // SVG dims
   const width = 600;
   const height = 400;
   const margin = { top: 20, right: 20, bottom: 60, left: 60 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
 
-  // Scale functions
+  // Scales
   const xScale = (x: number) => x * chartWidth + margin.left;
   const yScale = (y: number) => height - margin.bottom - (y * chartHeight) / 3;
 
-  // Create path string for curves
-  const createPath = (data: { x: number; y: number }[]) => {
-    return data
+  // Path
+  const createPath = (data: { x: number; y: number }[]) =>
+    data
       .map((d, i) => `${i === 0 ? "M" : "L"} ${xScale(d.x)} ${yScale(d.y)}`)
       .join(" ");
+
+  // Colors & widths
+  const meanColor = "#f59e0b"; // amber-500
+  const mapColor = "#16a34a"; // green-600
+  const bandWidth = 8;
+
+  // Fixed badges content
+  const meanBadge = {
+    title: `μ = ${mean.toFixed(3)}`,
+    sub: `a/(a+b) = ${a[0]}/(${a[0]}+${b[0]})`,
   };
 
-  // Layout for above-chart badges
-  const padTop = 96; // extra headroom for μ + MAP badges
-  const meanX = xScale(mean);
-  const badgeW = 180;
-  const badgeLeft = clamp(
-    meanX - badgeW / 2,
-    margin.left,
-    width - margin.right - badgeW
-  );
-
-  const mapColor = "#16a34a"; // green-600
-  const mapBandWidth = 8;
-  const mapBadgeTop = 6 + 44; // onder μ-badge
-  const centerBadgeLeft = clamp(
-    width / 2 - badgeW / 2,
-    margin.left,
-    width - margin.right - badgeW
-  );
-
-  // Tekst voor MAP-badges (met ingevulde waarden)
-  const mapBadgeText = (mx: number) => {
+  const mapBadgeText = () => {
     const A = a[0],
       B = b[0];
     if (mapInfo.kind === "interior") {
+      const mx = mapInfo.xs[0];
       return {
         title: `MAP = ${mx.toFixed(3)}`,
         sub: `(a-1)/(a+b-2) = ${fmt1(A - 1)}/(${fmt1(A)}+${fmt1(B)}-2)`,
@@ -141,12 +123,11 @@ export default function BetaFunctionDemo() {
     }
     if (mapInfo.kind === "both") {
       return {
-        title: `MAP niet uniek: 0 en 1`,
+        title: `MAP not unique: 0 and 1`,
         sub: `a = ${fmt1(A)} ≤ 1 en b = ${fmt1(B)} ≤ 1`,
       };
     }
-    // flat
-    return { title: `Geen unieke MAP`, sub: `Uniform: a = 1, b = 1` };
+    return { title: `No unique MAP`, sub: `Uniform: a = 1, b = 1` };
   };
 
   return (
@@ -154,7 +135,7 @@ export default function BetaFunctionDemo() {
       {/* Uitlegkaart bovenaan */}
       <Card>
         <CardHeader>
-          <CardTitle>What does the Beta distribution represent?</CardTitle>
+          <CardTitle>What is the Beta distribution?</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm leading-6">
           <p>
@@ -195,7 +176,6 @@ export default function BetaFunctionDemo() {
                 className="w-full"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium mb-2">
                 b: {b[0]}
@@ -231,7 +211,6 @@ export default function BetaFunctionDemo() {
                 >
                   [2,2]
                 </button>
-
                 <button
                   onClick={() => {
                     setA([3]);
@@ -276,328 +255,237 @@ export default function BetaFunctionDemo() {
         {/* Visualization */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Beta Distribution Visualization
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {/* Wrapper adds headroom and hosts the above-chart badges */}
-            <div className="relative" style={{ width, paddingTop: padTop }}>
-              {/* Mean badge ABOVE the chart */}
-              <div
-                className="absolute z-10 select-none pointer-events-none rounded-md bg-white/95 shadow-sm ring-1 ring-amber-400 px-3 py-2 text-sm font-medium text-amber-800"
-                style={{ left: badgeLeft, top: 6, width: badgeW }}
-              >
-                <div className="font-bold">μ = {mean.toFixed(3)}</div>
-                <div className="font-mono text-xs">
-                  a/(a+b) = {a[0]}/({a[0]}+{b[0]})
-                </div>
+            <CardTitle>Beta Distribution Visualization</CardTitle>
+            {/* Vaste kaders naast elkaar */}
+            <div className="mt-2 flex flex-wrap gap-3">
+              <div className="rounded-md bg-white/95 shadow-sm ring-1 ring-amber-400 px-3 py-2 text-sm font-medium text-amber-800">
+                <div className="font-bold">{meanBadge.title}</div>
+                <div className="font-mono text-xs">{meanBadge.sub}</div>
               </div>
-
-              {/* MAP badge(s) ABOVE the chart */}
-              {mapInfo.kind === "interior" &&
-                (() => {
-                  const mx = mapInfo.xs[0];
-                  const mxPix = xScale(mx);
-                  const left = clamp(
-                    mxPix - badgeW / 2,
-                    margin.left,
-                    width - margin.right - badgeW
-                  );
-                  const { title, sub } = mapBadgeText(mx);
-                  return (
-                    <div
-                      className="absolute z-10 select-none pointer-events-none rounded-md bg-white/95 shadow-sm px-3 py-2 text-sm font-medium"
-                      style={{
-                        left,
-                        top: mapBadgeTop,
-                        width: badgeW,
-                        border: "1px solid #16a34a",
-                        color: "#166534",
-                      }}
-                    >
-                      <div className="font-bold">{title}</div>
-                      <div className="font-mono text-xs">{sub}</div>
-                    </div>
-                  );
-                })()}
-
-              {(mapInfo.kind === "left" || mapInfo.kind === "right") &&
-                (() => {
-                  const mx = mapInfo.xs[0];
-                  const mxPix = xScale(mx);
-                  const left = clamp(
-                    mxPix - badgeW / 2,
-                    margin.left,
-                    width - margin.right - badgeW
-                  );
-                  const { title, sub } = mapBadgeText(mx);
-                  return (
-                    <div
-                      className="absolute z-10 select-none pointer-events-none rounded-md bg-white/95 shadow-sm px-3 py-2 text-sm font-medium"
-                      style={{
-                        left,
-                        top: mapBadgeTop,
-                        width: badgeW,
-                        border: "1px solid #16a34a",
-                        color: "#166534",
-                      }}
-                    >
-                      <div className="font-bold">{title}</div>
-                      <div className="font-mono text-xs">{sub}</div>
-                    </div>
-                  );
-                })()}
-
-              {mapInfo.kind === "both" &&
-                (() => {
-                  const { title, sub } = mapBadgeText(0);
-                  return (
-                    <div
-                      className="absolute z-10 select-none pointer-events-none rounded-md bg-white/95 shadow-sm px-3 py-2 text-sm font-medium"
-                      style={{
-                        left: centerBadgeLeft,
-                        top: mapBadgeTop,
-                        width: badgeW,
-                        border: "1px solid #16a34a",
-                        color: "#166534",
-                      }}
-                    >
-                      <div className="font-bold">{title}</div>
-                      <div className="font-mono text-xs">{sub}</div>
-                    </div>
-                  );
-                })()}
-
-              {mapInfo.kind === "flat" &&
-                (() => {
-                  const { title, sub } = mapBadgeText(0);
-                  return (
-                    <div
-                      className="absolute z-10 select-none pointer-events-none rounded-md bg-white/95 shadow-sm px-3 py-2 text-sm font-medium"
-                      style={{
-                        left: centerBadgeLeft,
-                        top: mapBadgeTop,
-                        width: badgeW,
-                        border: "1px solid #16a34a",
-                        color: "#166534",
-                      }}
-                    >
-                      <div className="font-bold">{title}</div>
-                      <div className="font-mono text-xs">{sub}</div>
-                    </div>
-                  );
-                })()}
-
-              <svg
-                width={width}
-                height={height}
-                className="border rounded block"
-              >
-                {/* Grid lines & defs */}
-                <defs>
-                  <pattern
-                    id="grid"
-                    width="50"
-                    height="50"
-                    patternUnits="userSpaceOnUse"
-                  >
-                    <path
-                      d="M 50 0 L 0 0 0 50"
-                      fill="none"
-                      stroke="#f0f0f0"
-                      strokeWidth="1"
-                    />
-                  </pattern>
-                </defs>
-
-                <rect
-                  width={chartWidth}
-                  height={chartHeight}
-                  x={margin.left}
-                  y={margin.top}
-                  fill="url(#grid)"
-                />
-
-                {/* Axes */}
-                <line
-                  x1={margin.left}
-                  y1={height - margin.bottom}
-                  x2={width - margin.right}
-                  y2={height - margin.bottom}
-                  stroke="black"
-                  strokeWidth="2"
-                />
-                <line
-                  x1={margin.left}
-                  y1={margin.top}
-                  x2={margin.left}
-                  y2={height - margin.bottom}
-                  stroke="black"
-                  strokeWidth="2"
-                />
-
-                {/* X-axis labels */}
-                {[0, 0.2, 0.4, 0.6, 0.8, 1.0].map((x) => (
-                  <g key={x}>
-                    <line
-                      x1={xScale(x)}
-                      y1={height - margin.bottom}
-                      x2={xScale(x)}
-                      y2={height - margin.bottom + 5}
-                      stroke="black"
-                    />
-                    <text
-                      x={xScale(x)}
-                      y={height - margin.bottom + 20}
-                      textAnchor="middle"
-                      fontSize="12"
-                    >
-                      {x}
-                    </text>
-                  </g>
-                ))}
-
-                {/* Y-axis labels */}
-                {[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0].map((y) => (
-                  <g key={y}>
-                    <line
-                      x1={margin.left - 5}
-                      y1={yScale(y)}
-                      x2={margin.left}
-                      y2={yScale(y)}
-                      stroke="black"
-                    />
-                    <text
-                      x={margin.left - 10}
-                      y={yScale(y) + 4}
-                      textAnchor="end"
-                      fontSize="12"
-                    >
-                      {y}
-                    </text>
-                  </g>
-                ))}
-
-                {/* Axis labels */}
-                <text
-                  x={width / 2}
-                  y={height - 10}
-                  textAnchor="middle"
-                  fontSize="14"
-                  fontWeight="bold"
-                >
-                  Parameter θ
-                </text>
-                <text
-                  x={20}
-                  y={height / 2}
-                  textAnchor="middle"
-                  fontSize="14"
-                  fontWeight="bold"
-                  transform={`rotate(-90, 20, ${height / 2})`}
-                >
-                  P(Θ = θ)
-                </text>
-
-                {/* Current curve */}
-                <path
-                  d={createPath(currentCurve)}
-                  fill="none"
-                  stroke="#2563eb"
-                  strokeWidth="3"
-                />
-
-                {/* Mean band + line + axis pointer */}
-                <rect
-                  x={meanX - 4}
-                  y={margin.top}
-                  width={8}
-                  height={chartHeight}
-                  fill="#f59e0b"
-                  opacity="0.08"
-                />
-                <line
-                  x1={meanX}
-                  y1={margin.top}
-                  x2={meanX}
-                  y2={height - margin.bottom}
-                  stroke="#f59e0b"
-                  strokeWidth={3}
-                  strokeDasharray="4,3"
-                />
-                <circle cx={meanX} cy={margin.top} r={3.5} fill="#f59e0b" />
-                <path
-                  d={`M ${meanX - 6} ${height - margin.bottom} L ${meanX + 6} ${
-                    height - margin.bottom
-                  } L ${meanX} ${height - margin.bottom + 9} Z`}
-                  fill="#f59e0b"
-                  opacity={0.9}
-                />
-                <text
-                  x={meanX}
-                  y={height - margin.bottom + 22}
-                  textAnchor="middle"
-                  fontSize="11"
-                  fill="#b45309"
-                  fontWeight="bold"
-                >
-                  μ
-                </text>
-
-                {/* MAP band(s) + line(s) + axis pointer(s) */}
-                {mapInfo.kind !== "flat" &&
-                  mapInfo.xs.map((mx, idx) => {
-                    const mxPix = xScale(mx);
-                    return (
-                      <g key={`map-line-${idx}-${mx}`}>
-                        <rect
-                          x={mxPix - mapBandWidth / 2}
-                          y={margin.top}
-                          width={mapBandWidth}
-                          height={chartHeight}
-                          fill={mapColor}
-                          opacity="0.08"
-                        />
-                        <line
-                          x1={mxPix}
-                          y1={margin.top}
-                          x2={mxPix}
-                          y2={height - margin.bottom}
-                          stroke={mapColor}
-                          strokeWidth={3}
-                          strokeDasharray="4,3"
-                        />
-                        <circle
-                          cx={mxPix}
-                          cy={margin.top}
-                          r={3.5}
-                          fill={mapColor}
-                        />
-                        <path
-                          d={`M ${mxPix - 6} ${height - margin.bottom} L ${
-                            mxPix + 6
-                          } ${height - margin.bottom} L ${mxPix} ${
-                            height - margin.bottom + 9
-                          } Z`}
-                          fill={mapColor}
-                          opacity={0.9}
-                        />
-                        <text
-                          x={mxPix}
-                          y={height - margin.bottom + 22}
-                          textAnchor="middle"
-                          fontSize="11"
-                          fill="#065f46"
-                          fontWeight="bold"
-                        >
-                          MAP
-                        </text>
-                      </g>
-                    );
-                  })}
-              </svg>
+              <div className="rounded-md bg-white/95 shadow-sm ring-1 ring-green-600 px-3 py-2 text-sm font-medium text-green-800">
+                <div className="font-bold">{mapBadgeText().title}</div>
+                <div className="font-mono text-xs">{mapBadgeText().sub}</div>
+              </div>
             </div>
+          </CardHeader>
+
+          <CardContent>
+            <svg width={width} height={height} className="border rounded block">
+              {/* Grid */}
+              <defs>
+                <pattern
+                  id="grid"
+                  width="50"
+                  height="50"
+                  patternUnits="userSpaceOnUse"
+                >
+                  <path
+                    d="M 50 0 L 0 0 0 50"
+                    fill="none"
+                    stroke="#f0f0f0"
+                    strokeWidth="1"
+                  />
+                </pattern>
+              </defs>
+              <rect
+                width={chartWidth}
+                height={chartHeight}
+                x={margin.left}
+                y={margin.top}
+                fill="url(#grid)"
+              />
+
+              {/* Axes */}
+              <line
+                x1={margin.left}
+                y1={height - margin.bottom}
+                x2={width - margin.right}
+                y2={height - margin.bottom}
+                stroke="black"
+                strokeWidth="2"
+              />
+              <line
+                x1={margin.left}
+                y1={margin.top}
+                x2={margin.left}
+                y2={height - margin.bottom}
+                stroke="black"
+                strokeWidth="2"
+              />
+
+              {/* X labels */}
+              {[0, 0.2, 0.4, 0.6, 0.8, 1.0].map((x) => (
+                <g key={x}>
+                  <line
+                    x1={xScale(x)}
+                    y1={height - margin.bottom}
+                    x2={xScale(x)}
+                    y2={height - margin.bottom + 5}
+                    stroke="black"
+                  />
+                  <text
+                    x={xScale(x)}
+                    y={height - margin.bottom + 20}
+                    textAnchor="middle"
+                    fontSize="12"
+                  >
+                    {x}
+                  </text>
+                </g>
+              ))}
+
+              {/* Y labels */}
+              {[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0].map((y) => (
+                <g key={y}>
+                  <line
+                    x1={margin.left - 5}
+                    y1={yScale(y)}
+                    x2={margin.left}
+                    y2={yScale(y)}
+                    stroke="black"
+                  />
+                  <text
+                    x={margin.left - 10}
+                    y={yScale(y) + 4}
+                    textAnchor="end"
+                    fontSize="12"
+                  >
+                    {y}
+                  </text>
+                </g>
+              ))}
+
+              {/* Axis labels */}
+              <text
+                x={width / 2}
+                y={height - 10}
+                textAnchor="middle"
+                fontSize="14"
+                fontWeight="bold"
+              >
+                Parameter θ
+              </text>
+              <text
+                x={20}
+                y={height / 2}
+                textAnchor="middle"
+                fontSize="14"
+                fontWeight="bold"
+                transform={`rotate(-90, 20, ${height / 2})`}
+              >
+                P(Θ = θ)
+              </text>
+
+              {/* Curve */}
+              <path
+                d={createPath(currentCurve)}
+                fill="none"
+                stroke="#2563eb"
+                strokeWidth="3"
+              />
+
+              {/* Mean band + SOLID line + pointer */}
+              {(() => {
+                const meanX = xScale(mean);
+                return (
+                  <g>
+                    <rect
+                      x={meanX - bandWidth / 2}
+                      y={margin.top}
+                      width={bandWidth}
+                      height={chartHeight}
+                      fill={meanColor}
+                      opacity="0.08"
+                    />
+                    <line
+                      x1={meanX}
+                      y1={margin.top}
+                      x2={meanX}
+                      y2={height - margin.bottom}
+                      stroke={meanColor}
+                      strokeWidth={3}
+                    />
+                    <circle
+                      cx={meanX}
+                      cy={margin.top}
+                      r={3.5}
+                      fill={meanColor}
+                    />
+                    <path
+                      d={`M ${meanX - 6} ${height - margin.bottom} L ${
+                        meanX + 6
+                      } ${height - margin.bottom} L ${meanX} ${
+                        height - margin.bottom + 9
+                      } Z`}
+                      fill={meanColor}
+                      opacity={0.9}
+                    />
+                    <text
+                      x={meanX}
+                      y={height - margin.bottom + 22}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fill="#b45309"
+                      fontWeight="bold"
+                    >
+                      μ
+                    </text>
+                  </g>
+                );
+              })()}
+
+              {/* MAP band(s) + DASHED line(s) + pointer(s) */}
+              {mapInfo.kind !== "flat" &&
+                mapInfo.xs.map((mx, idx) => {
+                  const mxPix = xScale(mx);
+                  return (
+                    <g key={`map-line-${idx}-${mx}`}>
+                      <rect
+                        x={mxPix - bandWidth / 2}
+                        y={margin.top}
+                        width={bandWidth}
+                        height={chartHeight}
+                        fill={mapColor}
+                        opacity="0.08"
+                      />
+                      <line
+                        x1={mxPix}
+                        y1={margin.top}
+                        x2={mxPix}
+                        y2={height - margin.bottom}
+                        stroke={mapColor}
+                        strokeWidth={3}
+                        strokeDasharray="6,4"
+                      />
+                      <circle
+                        cx={mxPix}
+                        cy={margin.top}
+                        r={3.5}
+                        fill={mapColor}
+                      />
+                      <path
+                        d={`M ${mxPix - 6} ${height - margin.bottom} L ${
+                          mxPix + 6
+                        } ${height - margin.bottom} L ${mxPix} ${
+                          height - margin.bottom + 9
+                        } Z`}
+                        fill={mapColor}
+                        opacity={0.9}
+                      />
+                      <text
+                        x={mxPix}
+                        y={height - margin.bottom + 22}
+                        textAnchor="middle"
+                        fontSize="11"
+                        fill="#065f46"
+                        fontWeight="bold"
+                      >
+                        MAP
+                      </text>
+                    </g>
+                  );
+                })}
+            </svg>
           </CardContent>
         </Card>
       </div>
