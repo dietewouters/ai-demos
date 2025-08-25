@@ -14,7 +14,6 @@ import {
   getPathSegments,
   type PathInfo,
 } from "./d-separation";
-import { predefinedNetworks } from "./network-registry";
 import {
   Select,
   SelectContent,
@@ -23,13 +22,154 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export default function DSeparationDemo() {
+export type DSeparationDemoProps = {
+  /** Accepts either an array of networks or an object map (like your predefinedNetworks). */
+  networks: BayesianNetwork[] | Record<string, any>;
+  /** Optionally preselect a network by name (for maps, this is the object key). */
+  defaultNetworkName?: string;
+  /** Optional: map internal names/keys to pretty labels shown in the dropdown */
+  labels?: Record<string, string>;
+  /** Optional: explicit ordering of the dropdown by internal names/keys */
+  order?: string[];
+  /** Optional UI niceties */
+  title?: string;
+  className?: string;
+  /** Hide the how-to panel if you embed this elsewhere */
+  showInstructions?: boolean;
+};
+
+const EMPTY_NETWORK: BayesianNetwork = {
+  name: "—",
+  description: "No network provided",
+  nodes: [],
+  edges: [],
+};
+
+// --- helpers ---
+type MinimalNode = {
+  id: string;
+  parents?: string[];
+  children?: string[]; // mag ontbreken in data
+  x?: number;
+  y?: number;
+  name?: string;
+  fixed?: boolean;
+};
+
+type RegistryMap = Record<
+  string,
+  {
+    nodes: MinimalNode[];
+    probabilities?: any;
+    evidence?: Record<string, boolean>;
+    description?: string;
+  }
+>;
+
+function nodesWithChildren(nodes: MinimalNode[]) {
+  // clone en garandeer children-array
+  const cloned = nodes.map((n) => ({
+    ...n,
+    children: Array.isArray(n.children) ? [...n.children] : ([] as string[]),
+  }));
+  const byId = new Map(cloned.map((n) => [n.id, n]));
+  for (const n of cloned) {
+    for (const p of n.parents ?? []) {
+      const parent = byId.get(p);
+      if (parent) parent.children!.push(n.id);
+    }
+  }
+  return cloned;
+}
+
+function edgesFromParents(nodes: MinimalNode[]) {
+  const edges: { from: string; to: string }[] = [];
+  for (const n of nodes)
+    (n.parents ?? []).forEach((p) => edges.push({ from: p, to: n.id }));
+  return edges;
+}
+
+function normalizeNetworks(
+  input: BayesianNetwork[] | RegistryMap
+): BayesianNetwork[] {
+  if (Array.isArray(input)) {
+    return input.map((n, i) => {
+      const nodes = nodesWithChildren(
+        ((n as any).nodes ?? []) as MinimalNode[]
+      );
+      return {
+        name: (n as any).name ?? `Network ${i + 1}`,
+        description: (n as any).description ?? "",
+        nodes,
+        edges: (n as any).edges ?? edgesFromParents(nodes),
+        probabilities: (n as any).probabilities,
+        evidence: (n as any).evidence ?? {},
+      } as any;
+    });
+  }
+  // object-map: key wordt de naam
+  return Object.entries(input).map(([key, net]) => {
+    const nodes = nodesWithChildren((net.nodes ?? []) as MinimalNode[]);
+    return {
+      name: key,
+      description: net.description ?? "",
+      nodes,
+      edges: edgesFromParents(nodes),
+      probabilities: net.probabilities,
+      evidence: net.evidence ?? {},
+    } as any;
+  });
+}
+
+export default function DSeparationDemo({
+  networks,
+  defaultNetworkName,
+  labels,
+  order,
+  title,
+  className,
+  showInstructions = true,
+}: DSeparationDemoProps) {
+  // Normalize input (array or object) into an array with names & edges
+  const normalized = useMemo(() => normalizeNetworks(networks), [networks]);
+
+  // Apply optional ordering
+  const ordered = useMemo(() => {
+    const arr = [...normalized];
+    if (order && order.length) {
+      const pos = new Map(order.map((k, i) => [k, i]));
+      arr.sort(
+        (a, b) =>
+          (pos.get(a.name ?? "") ?? Number.POSITIVE_INFINITY) -
+          (pos.get(b.name ?? "") ?? Number.POSITIVE_INFINITY)
+      );
+    }
+    return arr;
+  }, [normalized, order]);
+
+  // Restrict selector to named networks (like your original did)
+  const namedNetworks = useMemo(
+    () =>
+      ordered.filter((n) => typeof n.name === "string" && n.name.length > 0),
+    [ordered]
+  );
+
+  const initialByDefaultName = useMemo(
+    () =>
+      defaultNetworkName
+        ? ordered.find((n) => n.name === defaultNetworkName)
+        : undefined,
+    [ordered, defaultNetworkName]
+  );
+
+  const initialNetwork: BayesianNetwork =
+    initialByDefaultName ?? namedNetworks[0] ?? ordered[0] ?? EMPTY_NETWORK;
+
   const [selectedNetworkName, setSelectedNetworkName] = useState(
-    predefinedNetworks[0].name
+    initialNetwork.name ?? ""
   );
-  const [currentNetwork, setCurrentNetwork] = useState<BayesianNetwork>(
-    predefinedNetworks[0]
-  );
+  const [currentNetwork, setCurrentNetwork] =
+    useState<BayesianNetwork>(initialNetwork);
 
   const [networkState, setNetworkState] = useState<NetworkState>({
     evidenceNodes: new Set(),
@@ -42,22 +182,27 @@ export default function DSeparationDemo() {
   >(null);
   const [selectedPath, setSelectedPath] = useState<string[] | null>(null);
 
-  // Reset state when network changes
+  // When the available networks OR the selected name changes, sync `currentNetwork` and reset UI state
   useEffect(() => {
-    const newNetwork = predefinedNetworks.find(
-      (net) => net.name === selectedNetworkName
-    );
-    if (newNetwork) {
-      setCurrentNetwork(newNetwork);
-      setNetworkState({
-        evidenceNodes: new Set(),
-        targetNode: null,
-        dSeparatedNodes: new Set(),
-      });
-      setSelectedNodeForAnalysis(null);
-      setSelectedPath(null);
+    const byName = ordered.find((n) => n.name === selectedNetworkName);
+    const next = byName ?? namedNetworks[0] ?? ordered[0] ?? EMPTY_NETWORK;
+    setCurrentNetwork(next);
+    setNetworkState({
+      evidenceNodes: new Set(),
+      targetNode: null,
+      dSeparatedNodes: new Set(),
+    });
+    setSelectedNodeForAnalysis(null);
+    setSelectedPath(null);
+  }, [selectedNetworkName, ordered, namedNetworks]);
+
+  // If the caller changes `defaultNetworkName` later, respect that when no explicit selection yet
+  useEffect(() => {
+    if (!selectedNetworkName && defaultNetworkName) {
+      const exists = ordered.find((n) => n.name === defaultNetworkName);
+      if (exists) setSelectedNetworkName(defaultNetworkName);
     }
-  }, [selectedNetworkName]);
+  }, [defaultNetworkName, ordered, selectedNetworkName]);
 
   const dSeparatedNodes = useMemo(() => {
     if (!networkState.targetNode) return new Set<string>();
@@ -88,27 +233,17 @@ export default function DSeparationDemo() {
   const handleToggleEvidence = (nodeId: string) => {
     setNetworkState((prev) => {
       const newEvidence = new Set(prev.evidenceNodes);
-      if (newEvidence.has(nodeId)) {
-        newEvidence.delete(nodeId);
-      } else {
-        newEvidence.add(nodeId);
-      }
-      return {
-        ...prev,
-        evidenceNodes: newEvidence,
-      };
+      if (newEvidence.has(nodeId)) newEvidence.delete(nodeId);
+      else newEvidence.add(nodeId);
+      return { ...prev, evidenceNodes: newEvidence };
     });
   };
 
   const handleSetTarget = (nodeId: string) => {
-    setNetworkState((prev) => {
-      // Deselect if already target, otherwise set as target
-      const newTarget = prev.targetNode === nodeId ? null : nodeId;
-      return {
-        ...prev,
-        targetNode: newTarget,
-      };
-    });
+    setNetworkState((prev) => ({
+      ...prev,
+      targetNode: prev.targetNode === nodeId ? null : nodeId,
+    }));
     setSelectedNodeForAnalysis(null);
     setSelectedPath(null);
   };
@@ -136,8 +271,9 @@ export default function DSeparationDemo() {
   );
 
   const dynamicHeight = useMemo(() => {
+    if (!currentNetwork.nodes.length) return 400;
     const maxY = currentNetwork.nodes.reduce(
-      (max, node) => Math.max(max, node.y),
+      (max, node) => Math.max(max, (node as any).y ?? 0),
       0
     );
     return Math.max(maxY + 100, 400);
@@ -150,50 +286,61 @@ export default function DSeparationDemo() {
     }));
   }, [currentNetwork.edges, nodeMap]);
 
-  return (
-    <div className="w-full max-w-6xl mx-auto p-4 space-y-6">
-      {/* Instructies bovenaan */}
-      <Card>
-        <CardHeader>
-          <CardTitle>D-Separation Demo Instructions</CardTitle>
-          <div className="text-sm text-gray-600 space-y-2 mt-4">
-            <p>
-              <strong>Instructions:</strong>
-            </p>
-            <ul className="list-disc list-inside space-y-1">
-              <li>
-                Click on a node to set it as the{" "}
-                <span className="text-blue-600 font-semibold">target node</span>
-                . Click again to deselect.
-              </li>
-              <li>
-                Shift+Click on nodes to toggle them as{" "}
-                <span className="text-green-600 font-semibold">evidence</span>.
-              </li>
-              <li>
-                Click on any other node (not target or evidence) to see{" "}
-                <strong>detailed path analysis</strong> between target and that
-                node.
-              </li>
-              <li>
-                Nodes highlighted in{" "}
-                <span className="text-red-600 font-semibold">red</span> are
-                d-separated from the target.
-              </li>
-              <li>
-                <span className="text-orange-600 font-semibold">Orange</span>{" "}
-                nodes are blocking a highlighted path.
-              </li>
-              <li>
-                <span className="text-yellow-600 font-semibold">Yellow</span>{" "}
-                nodes are part of the highlighted path.
-              </li>
-            </ul>
-          </div>
-        </CardHeader>
-      </Card>
+  const displayTitle = useMemo(() => {
+    const base = "D-Separation Demo";
+    return title ?? `${base}`;
+  }, [title]);
 
-      {/* Target Node, Evidence Nodes en D-Separated Nodes */}
+  return (
+    <div
+      className={`w-full max-w-6xl mx-auto p-4 space-y-6 ${className ?? ""}`}
+    >
+      {showInstructions && (
+        <Card>
+          <CardHeader>
+            <CardTitle>D-Separation Demo Instructions</CardTitle>
+            <div className="text-sm text-gray-600 space-y-2 mt-4">
+              <p>
+                <strong>Instructions:</strong>
+              </p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>
+                  Click on a node to set it as the{" "}
+                  <span className="text-blue-600 font-semibold">
+                    target node
+                  </span>
+                  . Click again to deselect.
+                </li>
+                <li>
+                  Shift+Click on nodes to toggle them as{" "}
+                  <span className="text-green-600 font-semibold">evidence</span>
+                  .
+                </li>
+                <li>
+                  Click on any other node (not target or evidence) to see{" "}
+                  <strong>detailed path analysis</strong> between target and
+                  that node.
+                </li>
+                <li>
+                  Nodes highlighted in{" "}
+                  <span className="text-red-600 font-semibold">red</span> are
+                  d-separated from the target.
+                </li>
+                <li>
+                  <span className="text-orange-600 font-semibold">Orange</span>{" "}
+                  nodes are blocking a highlighted path.
+                </li>
+                <li>
+                  <span className="text-yellow-600 font-semibold">Yellow</span>{" "}
+                  nodes are part of the highlighted path.
+                </li>
+              </ul>
+            </div>
+          </CardHeader>
+        </Card>
+      )}
+
+      {/* Target / Evidence / D-Separated */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader>
@@ -257,40 +404,50 @@ export default function DSeparationDemo() {
         </Card>
       </div>
 
-      {/* Netwerkvisualisatie */}
+      {/* Network visualization */}
       <Card>
         <CardHeader>
-          <CardTitle>{currentNetwork.name} - D-Separation Demo</CardTitle>
-          <p className="text-sm text-gray-600">{currentNetwork.description}</p>
+          <CardTitle>{displayTitle}</CardTitle>
+          {currentNetwork.description && (
+            <p className="text-sm text-gray-600">
+              {currentNetwork.description}
+            </p>
+          )}
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex items-center gap-4">
-            <label
-              htmlFor="network-select"
-              className="font-medium text-gray-700"
-            >
-              Select Network:
-            </label>
-            <Select
-              value={selectedNetworkName}
-              onValueChange={setSelectedNetworkName}
-            >
-              <SelectTrigger id="network-select" className="w-[200px]">
-                <SelectValue placeholder="Select a network" />
-              </SelectTrigger>
-              <SelectContent>
-                {predefinedNetworks.map((net, i) => (
-                  <SelectItem
-                    key={net.name ?? `unnamed-${i}`}
-                    value={net.name ?? ""}
-                    disabled={net.name === undefined}
-                  >
-                    {net.name ?? "– onbekend –"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {namedNetworks.length > 0 ? (
+            <div className="mb-4 flex items-center gap-4">
+              <label
+                htmlFor="network-select"
+                className="font-medium text-gray-700"
+              >
+                Select Network:
+              </label>
+              <Select
+                value={selectedNetworkName}
+                onValueChange={setSelectedNetworkName}
+              >
+                <SelectTrigger id="network-select" className="w-[260px]">
+                  <SelectValue placeholder="Select a network" />
+                </SelectTrigger>
+                <SelectContent>
+                  {namedNetworks.map((net, i) => (
+                    <SelectItem
+                      key={net.name ?? `unnamed-${i}`}
+                      value={net.name ?? `unnamed-${i}`}
+                      disabled={net.name === undefined}
+                    >
+                      {labels?.[net.name ?? ""] ?? net.name ?? "– onbekend –"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="mb-4 text-sm text-gray-500">
+              No named networks available.
+            </div>
+          )}
 
           <div
             className="relative w-full border border-gray-300 rounded-lg bg-gray-50"
@@ -324,7 +481,9 @@ export default function DSeparationDemo() {
                 let isBlockedFromHere = false;
 
                 if (selectedPath && selectedNodeForAnalysis) {
-                  const currentPathInfo = pathAnalysis
+                  const currentPathInfo = (
+                    pathAnalysis as Map<string, PathInfo[]>
+                  )
                     .get(selectedNodeForAnalysis)
                     ?.find(
                       (p: PathInfo) =>
@@ -340,8 +499,10 @@ export default function DSeparationDemo() {
 
                     const segment = pathSegments.find(
                       (seg) =>
-                        (seg.from === edge.from.id && seg.to === edge.to.id) ||
-                        (seg.from === edge.to.id && seg.to === edge.from.id)
+                        (seg.from === (edge as any).from.id &&
+                          seg.to === (edge as any).to.id) ||
+                        (seg.from === (edge as any).to.id &&
+                          seg.to === (edge as any).from.id)
                     );
 
                     if (segment) {
@@ -385,11 +546,12 @@ export default function DSeparationDemo() {
                 }
                 isBlockingNode={
                   selectedPath
-                    ? pathAnalysis
+                    ? (pathAnalysis as Map<string, PathInfo[]>)
                         .get(selectedNodeForAnalysis || "")
                         ?.some(
                           (p: PathInfo) =>
-                            p.path.join("→") === selectedPath.join("→") &&
+                            p.path.join("→") ===
+                              (selectedPath as string[]).join("→") &&
                             p.blockingNode === node.id
                         ) || false
                     : false
@@ -418,7 +580,9 @@ export default function DSeparationDemo() {
         selectedNode={selectedNodeForAnalysis}
         pathInfos={
           selectedNodeForAnalysis
-            ? pathAnalysis.get(selectedNodeForAnalysis) || []
+            ? (pathAnalysis as Map<string, PathInfo[]>).get(
+                selectedNodeForAnalysis
+              ) || []
             : []
         }
         onSelectPath={setSelectedPath}
