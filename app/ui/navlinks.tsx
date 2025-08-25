@@ -11,7 +11,10 @@ const links = [
   {
     name: "Search",
     href: "/mainpage/search",
-    children: [{ name: "General", href: "/mainpage/search/session2" }],
+    children: [
+      { name: "General", href: "/mainpage/search/session2" },
+      { name: "Minimax", href: "/mainpage/search/minimax" },
+    ],
   },
   {
     name: "CSP",
