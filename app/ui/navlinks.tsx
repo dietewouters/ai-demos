@@ -13,7 +13,7 @@ const links = [
     href: "/mainpage/search",
     children: [
       { name: "Search", href: "/mainpage/search/session1" },
-      { name: "Advanced Search", href: "/mainpage/search/session2" },
+      { name: "Advanced", href: "/mainpage/search/session2" },
       { name: "Minimax", href: "/mainpage/search/minimax" },
     ],
   },

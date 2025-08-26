@@ -48,6 +48,15 @@ export const AutocompleteBox: React.FC<{
   const addToken = useCallback((text: string) => {
     setTokens((prev) => [...prev, text]);
   }, []);
+  const clearText = useCallback(() => {
+    setCompletedTokens([]);
+    setTokens(["<start>"]);
+  }, []);
+
+  const isEmpty =
+    tokens.length === 1 &&
+    tokens[0] === "<start>" &&
+    completedTokens.length === 0;
 
   function startNewLine() {
     setCompletedTokens((prev) => [...prev, tokens]);
@@ -72,12 +81,21 @@ export const AutocompleteBox: React.FC<{
           />
         )}
         <div>
-          {showModelSelector && <Label>Tekst:</Label>}
-          <div
-            className={
-              "border rounded-md mt-2 h-40 max-h-40 overflow-y-scroll p-2"
-            }
-          >
+          <div className="flex items-center justify-between">
+            {showModelSelector && <Label>Text:</Label>}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearText}
+              disabled={isEmpty}
+              className="ml-auto"
+              title="Maak het tekstvak leeg"
+            >
+              Clear
+            </Button>
+          </div>
+
+          <div className="border rounded-md mt-2 h-40 max-h-40 overflow-y-scroll p-2">
             {completedTokens.map((tokens, index) => (
               <div key={index}>
                 <AutocompleteTextRender
@@ -95,6 +113,7 @@ export const AutocompleteBox: React.FC<{
             />
           </div>
         </div>
+
         <SuggestionsBox
           className={"mt-4"}
           model={currentModel}
