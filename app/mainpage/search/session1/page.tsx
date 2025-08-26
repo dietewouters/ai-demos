@@ -1,5 +1,5 @@
 import SearchDemo from "@/components/search/search-demo";
-import { algorithms } from "@/components/search/algorithms";
+import { algorithms } from "@/components/search/algorithms/algorithms";
 
 export default function Home() {
   return (
