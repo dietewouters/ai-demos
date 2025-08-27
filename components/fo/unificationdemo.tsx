@@ -8,6 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "@/components/ui/accordion";
 
 interface UnificationStep {
   step: number;
@@ -363,7 +369,24 @@ export default function UnificationDemo() {
             />
           </div>
         </div>
-
+        {/* Collapsible Notation Info Box */}
+        <Accordion type="single" collapsible className="mt-2">
+          <AccordionItem value="notation">
+            <AccordionTrigger className="text-sm font-medium">
+              Notation (click to expand)
+            </AccordionTrigger>
+            <AccordionContent>
+              <Alert className="border-blue-200 bg-blue-50">
+                <AlertDescription className="text-blue-800">
+                  <strong>Notation:</strong> Lowercase letters (x, y, z) are{" "}
+                  <strong>variables</strong>. Uppercase letters (A, B, C) are{" "}
+                  <strong>constants</strong>. Terms like f(x), p(A,y) are{" "}
+                  <strong>compound terms</strong> with functor and arguments.
+                </AlertDescription>
+              </Alert>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
         <div className="flex gap-2">
           <Button onClick={runUnification} disabled={isRunning}>
             Run Unification
@@ -499,59 +522,57 @@ export default function UnificationDemo() {
           )}
         </div>
       )}
-      <Alert className="border-blue-200 bg-blue-50">
-        <AlertDescription className="text-blue-800">
-          <strong>Notation:</strong> Lowercase letters (x, y, z) are{" "}
-          <strong>variables</strong>. Uppercase letters (A, B, C) are{" "}
-          <strong>constants</strong>. Terms like f(x), p(A,y) are{" "}
-          <strong>compound terms</strong> with functor and arguments.
-        </AlertDescription>
-      </Alert>
-      {/* Algorithm Reference */}
+
+      {/* Algorithm Reference — collapsible like previous */}
       <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Algorithm Explanation</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 text-sm font-mono">
-            <div>
-              <strong>Unify(a,b)</strong>
-            </div>
-            <div>- mgu := {"{a=b}"}; stop := false;</div>
-            <div>- WHILE (not(stop) AND mgu contains s=t)</div>
-            <div className="ml-4">
+        <details>
+          <summary className="cursor-pointer select-none p-4 font-medium">
+            Algorithm
+          </summary>
+          <CardContent className="pt-0 pb-4 px-4">
+            {/* Keep the original text as requested */}
+            <div className="space-y-2 text-sm font-mono">
               <div>
-                <strong>Case 1:</strong> t is a variable, s is not a variable:
+                <strong>Unify(a,b)</strong>
               </div>
-              <div className="ml-4">- Replace s=t by t=s in mgu</div>
-              <div>
-                <strong>Case 2:</strong> s is a variable, t is the SAME
-                variable:
-              </div>
-              <div className="ml-4">- Delete s=t from mgu</div>
-              <div>
-                <strong>Case 3:</strong> s is a variable, t is not a variable
-                and contains s:
-              </div>
-              <div className="ml-4">- stop := true</div>
-              <div>
-                <strong>Case 4:</strong> s is a variable, t is not identical to
-                nor contains s:
-              </div>
+              <div>- mgu := {"{a=b}"}; stop := false;</div>
+              <div>- WHILE (not(stop) AND mgu contains s=t)</div>
               <div className="ml-4">
-                - Replace all occurrences of s in mgu by t
-              </div>
-              <div>
-                <strong>Case 5:</strong> s is of the form f(s₁,...,sₙ), t of
-                g(t₁,...,tₘ):
-              </div>
-              <div className="ml-4">- If f ≠ g or m ≠ n then stop := true</div>
-              <div className="ml-4">
-                - Else replace s=t in mgu by s₁=t₁, ..., sₙ=tₙ
+                <div>
+                  <strong>Case 1:</strong> t is a variable, s is not a variable:
+                </div>
+                <div className="ml-4">- Replace s=t by t=s in mgu</div>
+                <div>
+                  <strong>Case 2:</strong> s is a variable, t is the SAME
+                  variable:
+                </div>
+                <div className="ml-4">- Delete s=t from mgu</div>
+                <div>
+                  <strong>Case 3:</strong> s is a variable, t is not a variable
+                  and contains s:
+                </div>
+                <div className="ml-4">- stop := true</div>
+                <div>
+                  <strong>Case 4:</strong> s is a variable, t is not identical
+                  to nor contains s:
+                </div>
+                <div className="ml-4">
+                  - Replace all occurrences of s in mgu by t
+                </div>
+                <div>
+                  <strong>Case 5:</strong> s is of the form f(s₁,...,sₙ), t of
+                  g(t₁,...,tₘ):
+                </div>
+                <div className="ml-4">
+                  - If f ≠ g or m ≠ n then stop := true
+                </div>
+                <div className="ml-4">
+                  - Else replace s=t in mgu by s₁=t₁, ..., sₙ=tₙ
+                </div>
               </div>
             </div>
-          </div>
-        </CardContent>
+          </CardContent>
+        </details>
       </Card>
     </div>
   );

@@ -15,6 +15,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+// ============================
+// Types
+// ============================
+
 type Term =
   | { kind: "Var"; name: string }
   | { kind: "Const"; name: string }
@@ -29,6 +33,10 @@ type FormulaNode =
   | { kind: "Iff"; left: FormulaNode; right: FormulaNode }
   | { kind: "Forall"; v: string; body: FormulaNode }
   | { kind: "Exists"; v: string; body: FormulaNode };
+
+// ============================
+// Lexer & Parser utilities
+// ============================
 
 class Lexer {
   s: string;
@@ -46,7 +54,8 @@ class Lexer {
     return this.i >= this.s.length;
   }
 }
-// Zet veelgebruikte ascii naar de juiste symbolen
+
+// Map common ASCII to logic symbols
 function normalizeAscii(input: string): string {
   let s = input;
 
@@ -380,7 +389,10 @@ function pushNeg(n: FormulaNode): FormulaNode {
   }
 }
 
+// ============================
 // Standardize apart
+// ============================
+
 let freshVarCounter = 0;
 function freshVar(prefix = "v"): string {
   return `${prefix}${freshVarCounter++}`;
@@ -492,7 +504,10 @@ function standardizeApart(
   }
 }
 
-// Prenex (assumes no →,↔ and negations pushed)
+// ============================
+// Prenex + Skolemization
+// ============================
+
 type Quant = { q: "∀" | "∃"; v: string };
 function toPrenex(n: FormulaNode): { quants: Quant[]; matrix: FormulaNode } {
   switch (n.kind) {
@@ -527,7 +542,7 @@ function toPrenex(n: FormulaNode): { quants: Quant[]; matrix: FormulaNode } {
   }
 }
 
-// Skolemization helpers (Uppercase names)
+// Skolem helpers (Uppercase names)
 let skolemCounter = 0;
 function freshSkolemConst() {
   return `C${skolemCounter++}`;
@@ -607,7 +622,10 @@ function skolemize(
   return { matrix: current, universals };
 }
 
+// ============================
 // CNF helpers
+// ============================
+
 function distributeOrOverAnd(n: FormulaNode): FormulaNode {
   function dist(a: FormulaNode, b: FormulaNode): FormulaNode {
     if (b.kind === "And") {
@@ -848,6 +866,9 @@ const exercises: Exercise[] = [
   },
 ];
 
+// ID for the new custom option inside the Exercise select
+const CUSTOM_EX_ID = "__custom__";
+
 export default function ImplicativeNormalFormDemo() {
   const [inputFormula, setInputFormula] = useState("");
   const [customFormula, setCustomFormula] = useState("");
@@ -856,6 +877,16 @@ export default function ImplicativeNormalFormDemo() {
   const [steps, setSteps] = useState<INFStep[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [completed, setCompleted] = useState(false);
+
+  const customRef = useRef<HTMLInputElement>(null);
+
+  const handleExerciseSelection = (val: string) => {
+    setSelectedExercise(val);
+    setSelectedFormula("");
+    setInputFormula("");
+    setCustomFormula("");
+    reset();
+  };
 
   const handleFormulaSelection = (formulaIndex: string) => {
     setSelectedFormula(formulaIndex);
@@ -875,7 +906,8 @@ export default function ImplicativeNormalFormDemo() {
     if (customFormula.trim()) {
       const normalized = normalizeAscii(customFormula.trim());
       setInputFormula(normalized);
-      setSelectedExercise("");
+      // Keep the exercise selection on custom; formula select stays empty
+      setSelectedExercise(CUSTOM_EX_ID);
       setSelectedFormula("");
       reset();
     }
@@ -957,8 +989,7 @@ export default function ImplicativeNormalFormDemo() {
       ),
     });
 
-    // ---- Internally compute prenex to enable Skolemization,
-    // but present steps in the order of the slide (Skolem first, then Prenex) ----
+    // Internally compute prenex to enable Skolemization
     const pren = toPrenex(ast);
 
     // 4. Eliminate ∃ (Introduce Skolems)
@@ -1043,7 +1074,6 @@ export default function ImplicativeNormalFormDemo() {
   const selectedExerciseData = exercises.find(
     (ex) => ex.id === selectedExercise
   );
-  const customRef = useRef<HTMLInputElement>(null);
 
   function insertAtCursor(text: string) {
     const el = customRef.current;
@@ -1054,7 +1084,7 @@ export default function ImplicativeNormalFormDemo() {
     const next = el.value.slice(0, start) + text + el.value.slice(end);
     setCustomFormula(next);
 
-    // Caret netjes achter het ingevoegde symbool
+    // place caret after inserted symbol
     requestAnimationFrame(() => {
       el.focus();
       const pos = start + text.length;
@@ -1064,20 +1094,23 @@ export default function ImplicativeNormalFormDemo() {
 
   const SYMBOLS = ["∀", "∃", "¬", "∧", "∨", "→", "↔", "(", ")", ","];
 
+  const showFormulaSelect =
+    selectedExercise && selectedExercise !== CUSTOM_EX_ID;
+  const showCustomInput = selectedExercise === CUSTOM_EX_ID;
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Select or Enter Formula</h3>
+        <h3 className="text-lg font-semibold">Choose Exercise & Formula</h3>
         {/* Exercise Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="exercise-select">Exercise</Label>
-
             <Select
               value={selectedExercise}
-              onValueChange={setSelectedExercise}
+              onValueChange={handleExerciseSelection}
             >
-              <SelectTrigger>
+              <SelectTrigger id="exercise-select">
                 <SelectValue placeholder="Select an exercise..." />
               </SelectTrigger>
               <SelectContent>
@@ -1086,83 +1119,85 @@ export default function ImplicativeNormalFormDemo() {
                     {exercise.name}
                   </SelectItem>
                 ))}
+                <Separator className="my-1" />
+                <SelectItem value={CUSTOM_EX_ID}>
+                  Custom formula (enter your own)
+                </SelectItem>
               </SelectContent>
             </Select>
-            {selectedExerciseData && (
-              <p className="text-xs text-gray-500 mt-1"></p>
-            )}
           </div>
 
-          <div>
-            <Label htmlFor="formula-select">Formula</Label>
-
-            <Select
-              value={selectedFormula}
-              onValueChange={handleFormulaSelection}
-              disabled={!selectedExercise}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a formula..." />
-              </SelectTrigger>
-              <SelectContent>
-                {selectedExerciseData?.formulas.map((formula, index) => (
-                  <SelectItem key={index} value={index.toString()}>
-                    {formula.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedExerciseData && selectedFormula !== "" && (
-              <p className="text-xs text-gray-500 mt-1"></p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Separator className="flex-1" />
-          <span className="text-base md:text-lg font-semibold text-gray-600">
-            OR
-          </span>
-          <Separator className="flex-1" />
-        </div>
-
-        {/* Custom Formula Input */}
-        <div className="space-y-2">
-          <Label htmlFor="custom-formula">Enter Custom Formula</Label>
-
-          {/* Symboolbalk */}
-          <div className="flex flex-wrap gap-2 mb-1">
-            {SYMBOLS.map((s) => (
-              <Button
-                key={s}
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => insertAtCursor(s)}
-                title={`Insert ${s}`}
+          {showFormulaSelect && (
+            <div>
+              <Label htmlFor="formula-select">Formula</Label>
+              <Select
+                value={selectedFormula}
+                onValueChange={handleFormulaSelection}
+                disabled={!selectedExercise}
               >
-                {s}
-              </Button>
-            ))}
-          </div>
-
-          <div className="flex gap-2">
-            <Input
-              id="custom-formula"
-              ref={customRef}
-              value={customFormula}
-              onChange={(e) => setCustomFormula(e.target.value)}
-              placeholder="Bijv.: forall x (P(x) -> exists y Q(f(x),y))"
-              className="font-mono"
-            />
-            <Button
-              onClick={loadCustomFormula}
-              disabled={!customFormula.trim()}
-            >
-              Load Formula
-            </Button>
-          </div>
+                <SelectTrigger id="formula-select">
+                  <SelectValue placeholder="Select a formula..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedExerciseData?.formulas.map((formula, index) => (
+                    <SelectItem key={index} value={index.toString()}>
+                      {formula.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
+
+        {/* Custom Formula Input (only when Custom is selected) */}
+        {showCustomInput && (
+          <div className="space-y-2">
+            <Label htmlFor="custom-formula">Enter Custom Formula</Label>
+
+            {/* Quick symbol bar */}
+            <div className="flex flex-wrap gap-2 mb-1">
+              {SYMBOLS.map((s) => (
+                <Button
+                  key={s}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => insertAtCursor(s)}
+                  title={`Insert ${s}`}
+                >
+                  {s}
+                </Button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <Input
+                id="custom-formula"
+                ref={customRef}
+                value={customFormula}
+                onChange={(e) => setCustomFormula(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    loadCustomFormula();
+                  }
+                }}
+                placeholder="e.g., forall x (P(x) -> exists y Q(f(x), y))"
+                className="font-mono"
+              />
+              <Button
+                onClick={loadCustomFormula}
+                disabled={!customFormula.trim()}
+              >
+                Use Formula
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500">
+              ASCII is accepted; it will be normalized to logical symbols.
+            </p>
+          </div>
+        )}
 
         <div className="flex gap-2 flex-wrap">
           <Button onClick={convertToINF} disabled={!inputFormula}>
@@ -1199,7 +1234,11 @@ export default function ImplicativeNormalFormDemo() {
           <Separator />
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Step-by-Step Conversion</h3>
-            <span className="px-3 py-1 bg-gray-100 rounded text-sm"></span>
+            <span className="px-3 py-1 bg-gray-100 rounded text-sm">
+              {completed
+                ? "Complete"
+                : `Step ${currentStep + 1} of ${steps.length}`}
+            </span>
           </div>
 
           {currentStepData && (
@@ -1243,6 +1282,55 @@ export default function ImplicativeNormalFormDemo() {
           )}
         </div>
       )}
+
+      {/* Algorithm (collapsible) */}
+      <Card className="mt-8">
+        <details>
+          <summary className="cursor-pointer select-none p-4 font-medium">
+            Algorithm
+          </summary>
+          <CardContent className="pt-0 pb-4 px-4">
+            <ol className="list-decimal pl-6 space-y-2 text-sm">
+              <li>
+                <strong>Eliminate ↔ and →</strong> — replace A ↔ B by (A → B) ∧
+                (B → A); replace A → B by ¬A ∨ B.
+              </li>
+              <li>
+                <strong>Push negations inside</strong> — De Morgan + quantifier
+                rules: ¬∀x φ ≡ ∃x ¬φ, ¬∃x φ ≡ ∀x ¬φ, etc.
+              </li>
+              <li>
+                <strong>Standardize variables</strong> — rename bound variables
+                so each quantifier uses a unique name.
+              </li>
+              <li>
+                <strong>Skolemize (eliminate ∃)</strong> — replace existentials
+                by Skolem constants/functions of preceding universals.
+              </li>
+              <li>
+                <strong>Prenex Normal Form</strong> — move remaining ∀
+                quantifiers to the front.
+              </li>
+              <li>
+                <strong>Distribute ∨ over ∧</strong> — transform the matrix
+                toward CNF.
+              </li>
+              <li>
+                <strong>Remove ∧</strong> — break top-level conjunction into
+                separate disjunctive clauses.
+              </li>
+              <li>
+                <strong>Remove ∀</strong> — universals are implicit in clausal
+                form.
+              </li>
+              <li>
+                <strong>Implicative form</strong> — move negative literals to
+                the left: (B₁ ∨ … ∨ B_m) ⟵ (A₁ ∧ … ∧ A_k).
+              </li>
+            </ol>
+          </CardContent>
+        </details>
+      </Card>
     </div>
   );
 }
