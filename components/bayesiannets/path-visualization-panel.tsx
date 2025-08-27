@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PathInfo } from "./d-separation";
+import { ChevronRight } from "lucide-react";
+import { useMemo } from "react";
 
 interface PathVisualizationPanelProps {
   targetNode: string | null;
@@ -12,7 +14,12 @@ interface PathVisualizationPanelProps {
   onSelectPath: (path: string[] | null) => void;
   selectedPath: string[] | null;
 }
-
+function pathKey(path: string[]) {
+  const fwd = path.join("→");
+  const rev = [...path].reverse().join("→");
+  // als je forward en reverse als hetzelfde wil zien:
+  return fwd < rev ? fwd : rev;
+}
 export function PathVisualizationPanel({
   targetNode,
   selectedNode,
@@ -35,11 +42,21 @@ export function PathVisualizationPanel({
       </Card>
     );
   }
-
-  const blockedPaths = pathInfos.filter((p) => p.isBlocked);
-  const unblockedPaths = pathInfos.filter((p) => !p.isBlocked);
+  const uniquePathInfos = useMemo(() => {
+    const seen = new Map<string, PathInfo>();
+    for (const info of pathInfos) {
+      const key = pathKey(info.path);
+      const prev = seen.get(key);
+      if (!prev || (prev.isBlocked && !info.isBlocked)) {
+        seen.set(key, info);
+      }
+    }
+    return Array.from(seen.values());
+  }, [pathInfos]);
+  const blockedPaths = uniquePathInfos.filter((p) => p.isBlocked);
+  const unblockedPaths = uniquePathInfos.filter((p) => !p.isBlocked);
   const isDSeparated =
-    pathInfos.length > 0 && pathInfos.every((p) => p.isBlocked);
+    pathInfos.length > 0 && uniquePathInfos.every((p) => p.isBlocked);
 
   return (
     <Card>
@@ -47,57 +64,24 @@ export function PathVisualizationPanel({
         <CardTitle className="text-lg">
           Path Visualization: {targetNode} → {selectedNode}
         </CardTitle>
+
         <div className="flex items-center gap-2 mt-2">
           <Badge variant={isDSeparated ? "destructive" : "default"}>
             {isDSeparated ? "D-Separated" : "Not D-Separated"}
           </Badge>
+
+          {/* ⬇︎ HIER de teller vervangen */}
           <span className="text-sm text-gray-600">
-            ({pathInfos.length} path{pathInfos.length !== 1 ? "s" : ""} found)
+            ({uniquePathInfos.length} path
+            {uniquePathInfos.length !== 1 ? "s" : ""} found)
           </span>
         </div>
       </CardHeader>
+
       <CardContent className="space-y-4">
         {pathInfos.length === 0 && (
           <p className="text-gray-500">No paths found between these nodes</p>
         )}
-
-        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-          <h4 className="font-semibold text-blue-800 mb-2">Visual Legend</h4>
-          <div className="space-y-1 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-10 flex-shrink-0 flex items-center justify-center">
-                <div className="w-8 h-0.5 bg-blue-500"></div>
-              </div>
-              <span>Open path segment</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-10 flex-shrink-0 flex items-center justify-center">
-                <div className="w-8 h-0.5 bg-red-600 border-dashed border-t-2 border-red-600"></div>
-              </div>
-              <span>Blocked path segment</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-10 flex-shrink-0 flex items-center justify-center">
-                <div className="w-4 h-4 bg-orange-500 rounded-full"></div>
-              </div>
-              <span>
-                Blocking node (node that causes the path to be blocked)
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-10 flex-shrink-0 flex items-center justify-center">
-                <span className="text-blue-600">→</span>
-              </div>
-              <span>Path direction arrows</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-10 flex-shrink-0 flex items-center justify-center">
-                <div className="w-8 h-0.5 bg-gray-400 opacity-30"></div>
-              </div>
-              <span>Network edges</span>
-            </div>
-          </div>
-        </div>
 
         {blockedPaths.length > 0 && (
           <div>
@@ -190,6 +174,50 @@ export function PathVisualizationPanel({
             </p>
           </div>
         )}
+        <div className=" p-3 rounded-lg border border-blue-200">
+          <div className="mb-4">
+            <details className="group [&_summary::-webkit-details-marker]:hidden">
+              <summary className="cursor-pointer select-none p-4 font-medium">
+                Legend
+              </summary>
+
+              <div className="space-y-1 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-10 flex-shrink-0 flex items-center justify-center">
+                    <div className="w-8 h-0.5 bg-blue-500"></div>
+                  </div>
+                  <span>Open path segment</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-10 flex-shrink-0 flex items-center justify-center">
+                    <div className="w-8 h-0.5 bg-red-600 border-dashed border-t-2 border-red-600"></div>
+                  </div>
+                  <span>Blocked path segment</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-10 flex-shrink-0 flex items-center justify-center">
+                    <div className="w-4 h-4 bg-orange-500 rounded-full"></div>
+                  </div>
+                  <span>
+                    Blocking node (node that causes the path to be blocked)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-10 flex-shrink-0 flex items-center justify-center">
+                    <span className="text-blue-600">→</span>
+                  </div>
+                  <span>Path direction arrows</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-10 flex-shrink-0 flex items-center justify-center">
+                    <div className="w-8 h-0.5 bg-gray-400 opacity-30"></div>
+                  </div>
+                  <span>Network edges</span>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

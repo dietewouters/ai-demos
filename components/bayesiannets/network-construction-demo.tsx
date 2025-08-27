@@ -147,6 +147,7 @@ export default function NetworkConstructionDemo() {
   const [showExplanationModal, setShowExplanationModal] = useState(false);
 
   const currentStepData = constructionSteps[currentStep];
+  const NODE_R = 35;
 
   const nextStep = () => {
     if (currentStep < constructionSteps.length - 1) {
@@ -167,47 +168,34 @@ export default function NetworkConstructionDemo() {
   const renderNetworkDiagram = () => {
     return (
       <div className="relative border rounded-md h-[500px] bg-gray-50">
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowExplanationModal(true)}
-          >
-            <Info className="h-4 w-4 mr-2" /> Info
-          </Button>
-        </div>
-        <svg width="100%" height="100%" className="w-full">
-          {/* Render edges */}
-          {currentStepData.edges.map((edge, index) => {
+        {/* SVG vult de hele container, geen layout-shift */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+          {currentStepData.edges.map((edge) => {
             const fromNode = currentStepData.nodes.find(
               (n) => n.id === edge.from
             );
             const toNode = currentStepData.nodes.find((n) => n.id === edge.to);
-
             if (!fromNode || !toNode) return null;
 
-            // Calculate arrow positions
             const angle = Math.atan2(
               toNode.y - fromNode.y,
               toNode.x - fromNode.x
             );
-            const nodeRadius = 35;
-            const startX = fromNode.x + Math.cos(angle) * nodeRadius;
-            const startY = fromNode.y + Math.sin(angle) * nodeRadius;
-            const endX = toNode.x - Math.cos(angle) * nodeRadius;
-            const endY = toNode.y - Math.sin(angle) * nodeRadius;
+            const startX = fromNode.x + Math.cos(angle) * NODE_R;
+            const startY = fromNode.y + Math.sin(angle) * NODE_R;
+            const endX = toNode.x - Math.cos(angle) * NODE_R;
+            const endY = toNode.y - Math.sin(angle) * NODE_R;
 
-            // Arrow head
+            // arrowhead
             const arrowSize = 8;
             const arrowAngle = Math.PI / 6;
-            const arrowPoint1X =
-              endX - arrowSize * Math.cos(angle - arrowAngle);
-            const arrowPoint1Y =
-              endY - arrowSize * Math.sin(angle - arrowAngle);
-            const arrowPoint2X =
-              endX - arrowSize * Math.cos(angle + arrowAngle);
-            const arrowPoint2Y =
-              endY - arrowSize * Math.sin(angle + arrowAngle);
+            const p1x = endX - arrowSize * Math.cos(angle - arrowAngle);
+            const p1y = endY - arrowSize * Math.sin(angle - arrowAngle);
+            const p2x = endX - arrowSize * Math.cos(angle + arrowAngle);
+            const p2y = endY - arrowSize * Math.sin(angle + arrowAngle);
+
+            const color = edge.isNew ? "#ef4444" : "#374151";
+            const width = edge.isNew ? 3 : 2;
 
             return (
               <g key={`${edge.from}-${edge.to}`}>
@@ -216,14 +204,14 @@ export default function NetworkConstructionDemo() {
                   y1={startY}
                   x2={endX}
                   y2={endY}
-                  stroke={edge.isNew ? "#ef4444" : "#374151"}
-                  strokeWidth={edge.isNew ? 3 : 2}
+                  stroke={color}
+                  strokeWidth={width}
                   strokeOpacity={0.8}
                   className={edge.isNew ? "animate-pulse" : ""}
                 />
                 <polygon
-                  points={`${endX},${endY} ${arrowPoint1X},${arrowPoint1Y} ${arrowPoint2X},${arrowPoint2Y}`}
-                  fill={edge.isNew ? "#ef4444" : "#374151"}
+                  points={`${endX},${endY} ${p1x},${p1y} ${p2x},${p2y}`}
+                  fill={color}
                   opacity={0.8}
                   className={edge.isNew ? "animate-pulse" : ""}
                 />
@@ -232,7 +220,7 @@ export default function NetworkConstructionDemo() {
           })}
         </svg>
 
-        {/* Render nodes */}
+        {/* Nodes (delen hetzelfde coördinatenstelsel als de SVG) */}
         {currentStepData.nodes.map((node) => (
           <div
             key={node.id}
@@ -241,10 +229,7 @@ export default function NetworkConstructionDemo() {
                 ? "bg-red-100 border-red-500 animate-pulse scale-110"
                 : "bg-white border-gray-400"
             }`}
-            style={{
-              left: `${node.x}px`,
-              top: `${node.y}px`,
-            }}
+            style={{ left: `${node.x}px`, top: `${node.y}px` }}
           >
             <span
               className={`font-bold text-lg ${
@@ -256,7 +241,18 @@ export default function NetworkConstructionDemo() {
           </div>
         ))}
 
-        {/* Step indicator */}
+        {/* Verplaats de knoppen naar absolute overlay zodat ze geen ruimte innemen */}
+        <div className="absolute top-2 left-2 z-10 flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowExplanationModal(true)}
+          >
+            <Info className="h-4 w-4 mr-2" /> Info
+          </Button>
+        </div>
+
+        {/* Step indicator blijft ook absoluut */}
         <div className="absolute top-4 right-4">
           <Badge variant="outline" className="text-sm">
             Stap {currentStep} van {constructionSteps.length - 1}
@@ -269,9 +265,6 @@ export default function NetworkConstructionDemo() {
   return (
     <div className="bg-card rounded-lg border shadow-sm p-6">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">
-          Bayesian Network Construction Demo
-        </h2>
         <Button variant="outline" size="sm" onClick={resetDemo}>
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset

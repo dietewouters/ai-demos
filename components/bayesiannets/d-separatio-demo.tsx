@@ -296,13 +296,12 @@ export default function DSeparationDemo({
       className={`w-full max-w-6xl mx-auto p-4 space-y-6 ${className ?? ""}`}
     >
       {showInstructions && (
-        <Card>
-          <CardHeader>
-            <CardTitle>D-Separation Demo Instructions</CardTitle>
-            <div className="text-sm text-gray-600 space-y-2 mt-4">
-              <p>
-                <strong>Instructions:</strong>
-              </p>
+        <Card className="mt-8">
+          <details>
+            <summary className="cursor-pointer select-none p-4 font-medium">
+              Instructions
+            </summary>
+            <CardContent className="pt-0 pb-2 px-4 text-[14px] leading-5 text-slate-700">
               <ul className="list-disc list-inside space-y-1">
                 <li>
                   Click on a node to set it as the{" "}
@@ -335,8 +334,8 @@ export default function DSeparationDemo({
                   nodes are part of the highlighted path.
                 </li>
               </ul>
-            </div>
-          </CardHeader>
+            </CardContent>
+          </details>
         </Card>
       )}
 

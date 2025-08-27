@@ -9,7 +9,7 @@ import DSeparationDemo from "@/components/bayesiannets/d-separatio-demo";
 export default function Home() {
   return (
     <div className="container max-w-6xl mx-auto p-4 py-8">
-      <div className="text-3xl font-bold mb-6">Construction</div>
+      <div className="text-3xl font-bold mb-6">Construction Demo</div>
 
       <div className="mt-8">
         <p className="text-gray-700">

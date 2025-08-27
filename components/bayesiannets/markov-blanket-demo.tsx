@@ -25,6 +25,7 @@ import type {
   MarkovBlanketStep,
 } from "./network-types";
 import { predefinedNetworks } from "./network-registry";
+import { Settings } from "lucide-react";
 
 interface MarkovBlanketDemoProps {
   width?: number;
@@ -146,7 +147,7 @@ export default function MarkovBlanketDemo({
       stepList.push({
         type: "coparents",
         nodes: Array.from(coparents),
-        description: `Step 3: add all the co-parents (parents from the children of ${targetNode.name})`,
+        description: `Step 3: add all the co-parents (parents of the children of ${targetNode.name})`,
       });
 
       return { blanket: Array.from(blanket), steps: stepList };
@@ -243,12 +244,6 @@ export default function MarkovBlanketDemo({
   return (
     <div className="w-full max-w-6xl mx-auto p-4 space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>
-            {currentNetwork.name || "Bayesian Network"} - Markov Blanket Demo
-          </CardTitle>
-          <CardDescription>{currentNetwork.description}</CardDescription>
-        </CardHeader>
         <CardContent>
           {networkError ? (
             <div className="mb-6 flex items-center gap-4">
@@ -409,9 +404,10 @@ export default function MarkovBlanketDemo({
             {/* Controls and Info */}
             <div className="w-full lg:w-80 space-y-4">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Controles</CardTitle>
-                </CardHeader>
+                <CardTitle className="flex items-center gap-2 pl-4">
+                  <Settings className="w-5 h-5" />
+                  Controls
+                </CardTitle>
                 <CardContent className="space-y-4">
                   {selectedNode && (
                     <div>
@@ -456,7 +452,7 @@ export default function MarkovBlanketDemo({
                     <p className="text-sm">{getCurrentStepDescription()}</p>
                     <div className="border-t border-gray-200 my-4"></div>
                     <div className="space-y-2">
-                      <h4 className="font-medium text-sm">Legende:</h4>
+                      <h4 className="font-medium text-sm">Legend:</h4>
                       <div className="space-y-1 text-xs">
                         <div className="flex items-center gap-2">
                           <div className="w-4 h-4 rounded-full bg-blue-500 border border-blue-700"></div>
