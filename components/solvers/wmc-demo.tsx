@@ -49,6 +49,8 @@ const EXAMPLE_FORMULAS = [
 /// Tabel hardcap om 2^n rijen te beperken
 const MAX_TABLE_VARS = 12;
 
+const CUSTOM_OPTION = "__own__";
+
 type ProbMap = Record<string, number>;
 type Assign = Record<string, boolean>;
 
@@ -73,7 +75,6 @@ function enumerateAssignments(vars: string[]): Assign[] {
 }
 
 function numStr(x: number) {
-  // compacte weergave zonder ruis
   if (x === 0) return "0";
   if (x === 1) return "1";
   const s = x.toFixed(4);
@@ -114,12 +115,14 @@ export function WMCDemo() {
   const [tableTruncated, setTableTruncated] = useState(false);
   const [weightSum, setWeightSum] = useState<number | null>(null);
 
-  // keep formula text in sync
+  // keep formula text in sync (respect own-formula option)
   useEffect(() => {
-    if (selectedExample) {
+    if (selectedExample && selectedExample !== CUSTOM_OPTION) {
       const ex = EXAMPLE_FORMULAS.find((e) => e.name === selectedExample);
       setFormulaText(ex?.formula ?? "");
       if (ex) setCustomFormula("");
+    } else if (selectedExample === CUSTOM_OPTION) {
+      setFormulaText(customFormula);
     } else {
       setFormulaText(customFormula);
     }
@@ -160,7 +163,7 @@ export function WMCDemo() {
           const w = weightOfAssignment(a, pmap);
           const contrib = isModel ? w.value : 0;
           totalWMC += contrib;
-          totalWeight += w.value; // ⬅️ nieuw
+          totalWeight += w.value;
           if (isModel) totalSAT += 1;
 
           out.push({
@@ -173,7 +176,6 @@ export function WMCDemo() {
           });
         }
       } else {
-        // geen tabel (n > MAX_TABLE_VARS): totals blijven correct
         const nHardCap = Math.min(vs.length, 20);
         const assigns = enumerateAssignments(vs.slice(0, nHardCap));
         for (const a of assigns) {
@@ -182,14 +184,13 @@ export function WMCDemo() {
           const isModel = evaluateCNF(parsed, full);
           const w = weightOfAssignment(full, pmap);
           totalWMC += isModel ? w.value : 0;
-          // totalWeight over alle 2^n assignments tonen we alleen in de tabel-variant
         }
       }
 
       setRows(out);
       setWmc(totalWMC);
       setSatCount(totalSAT);
-      setWeightSum(showTable ? totalWeight : null); // ⬅️ nieuw
+      setWeightSum(showTable ? totalWeight : null);
       setTableTruncated(!showTable);
     } catch (e) {
       console.error(e);
@@ -205,7 +206,7 @@ export function WMCDemo() {
 
     let totalWMC = 0;
     let totalSAT = 0;
-    let totalWeight = 0; // ⬅️ nieuw
+    let totalWeight = 0;
     const out: any[] = [];
 
     if (showTable) {
@@ -215,7 +216,7 @@ export function WMCDemo() {
         const w = weightOfAssignment(a, probs);
         const contrib = isModel ? w.value : 0;
         totalWMC += contrib;
-        totalWeight += w.value; // ⬅️ nieuw
+        totalWeight += w.value;
         if (isModel) totalSAT += 1;
         out.push({
           a,
@@ -235,7 +236,6 @@ export function WMCDemo() {
         const isModel = evaluateCNF(formula, full);
         const w = weightOfAssignment(full, probs);
         totalWMC += isModel ? w.value : 0;
-        // totalWeight niet zinvol zonder volledige tabel
       }
     }
 
@@ -251,16 +251,16 @@ export function WMCDemo() {
     if (!allHalf || satCount == null) return null;
     return satCount / Math.pow(2, n);
   }, [satCount, n, allHalf]);
+
   // Ref naar de Textarea
   const customRef = useRef<HTMLTextAreaElement>(null);
 
-  // Tekst invoegen op cursorpositie
+  // Tekst invoegen op cursorpositie (en naar custom overschakelen)
   function insertAtCursor(text: string) {
     const el = customRef.current;
     if (!el) return;
 
-    // als er een voorbeeld gekozen is, overschakelen naar custom invoer
-    setSelectedExample("");
+    setSelectedExample(CUSTOM_OPTION);
 
     const start = el.selectionStart ?? el.value.length;
     const end = el.selectionEnd ?? el.value.length;
@@ -268,7 +268,6 @@ export function WMCDemo() {
     const next = el.value.slice(0, start) + text + el.value.slice(end);
     setCustomFormula(next);
 
-    // Caret achter het ingevoegde stuk
     requestAnimationFrame(() => {
       el.focus();
       const pos = start + text.length;
@@ -276,7 +275,6 @@ export function WMCDemo() {
     });
   }
 
-  // Toonbare knoppen (inclusief ASCII en logische varianten)
   const SYMBOLS: { label: string; insert: string; title?: string }[] = [
     { label: "¬", insert: "¬", title: "NOT" },
     { label: "∧", insert: " ∧ ", title: "AND (∧)" },
@@ -284,6 +282,8 @@ export function WMCDemo() {
     { label: "(", insert: "(", title: "Open bracket" },
     { label: ")", insert: ")", title: "Close bracket" },
   ];
+
+  const showCustom = selectedExample === CUSTOM_OPTION;
 
   const maxModelWeight = useMemo(
     () =>
@@ -293,9 +293,8 @@ export function WMCDemo() {
       ),
     [rows]
   );
-  const GREEN = [110, 231, 183]; // Tailwind emerald-300
-  const MIN_ALPHA = 0.12; // minimum zichtbaarheid
-  const MAX_ALPHA = 0.5; // was ~0.9 → nu veel lichter
+  const MIN_ALPHA = 0.12;
+  const MAX_ALPHA = 0.5;
 
   return (
     <div className="flex h-screen bg-background">
@@ -316,10 +315,11 @@ export function WMCDemo() {
               value={selectedExample}
               onValueChange={(v) => {
                 setSelectedExample(v);
+                if (v !== CUSTOM_OPTION) setCustomFormula("");
               }}
             >
               <SelectTrigger className="text-xs">
-                <SelectValue placeholder="Select example..." />
+                <SelectValue placeholder="Select example or choose own..." />
               </SelectTrigger>
               <SelectContent>
                 {EXAMPLE_FORMULAS.map((ex) => (
@@ -327,36 +327,44 @@ export function WMCDemo() {
                     {ex.name}
                   </SelectItem>
                 ))}
+                <Separator className="my-1" />
+                <SelectItem value={CUSTOM_OPTION} className="text-xs">
+                  Own formula (enter your own)
+                </SelectItem>
               </SelectContent>
             </Select>
-            <div className="text-center text-xs text-muted-foreground">or</div>
-            {/* ⬇️ Symboolbalk */}
-            <div className="flex flex-wrap gap-2 mb-2">
-              {SYMBOLS.map((s) => (
-                <Button
-                  key={s.label}
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => insertAtCursor(s.insert)}
-                  title={s.title ?? s.label}
-                  className="px-2"
-                >
-                  {s.label}
-                </Button>
-              ))}
-            </div>
 
-            <Textarea
-              ref={customRef}
-              placeholder="Enter custom formula..."
-              value={customFormula}
-              onChange={(e) => {
-                setCustomFormula(e.target.value);
-                setSelectedExample("");
-              }}
-              className="min-h-16 text-xs font-mono"
-            />
+            {/* Custom entry (only when own formula selected) */}
+            {showCustom && (
+              <>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {SYMBOLS.map((s) => (
+                    <Button
+                      key={s.label}
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => insertAtCursor(s.insert)}
+                      title={s.title ?? s.label}
+                      className="px-2"
+                    >
+                      {s.label}
+                    </Button>
+                  ))}
+                </div>
+
+                <Textarea
+                  ref={customRef}
+                  placeholder="Enter custom formula..."
+                  value={customFormula}
+                  onChange={(e) => {
+                    setCustomFormula(e.target.value);
+                    setSelectedExample(CUSTOM_OPTION);
+                  }}
+                  className="min-h-16 text-xs font-mono"
+                />
+              </>
+            )}
           </div>
 
           <div className="p-2 bg-muted rounded text-xs font-mono break-all mb-4">
@@ -389,7 +397,6 @@ export function WMCDemo() {
               <div className="space-y-3">
                 {variables.map((v) => (
                   <div key={v} className="space-y-1">
-                    {/* alleen de variabele-naam links (geen “kans boven de kans”) */}
                     <div className="text-xs font-mono">{v}</div>
                     <div className="flex items-center gap-2">
                       <Slider
@@ -499,8 +506,6 @@ export function WMCDemo() {
                       r.isModel && maxModelWeight > 0
                         ? r.weight / maxModelWeight
                         : 0;
-
-                    // lineaire schaal naar MAX_ALPHA, ondergrens = MIN_ALPHA
                     const alpha =
                       r.isModel && ratio > 0
                         ? Math.max(
@@ -546,7 +551,6 @@ export function WMCDemo() {
                       </TableRow>
                     );
                   })}
-                  {/* totals row ongewijzigd */}
                   <TableRow>
                     {variables.map((v) => (
                       <TableCell key={v} className="border-t" />

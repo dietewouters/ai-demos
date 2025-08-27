@@ -56,6 +56,7 @@ export function SATSolverDemo() {
   const [earlyStopping, setEarlyStopping] = useState(true);
 
   const FINISH_ID = "__finish__";
+  const CUSTOM_OPTION = "__own__"; // dropdown option for own formula
 
   // Run config snapshot (so we know how the last run was executed)
   const [runConfig, setRunConfig] = useState<{
@@ -70,7 +71,7 @@ export function SATSolverDemo() {
   const [idx, setIdx] = useState(0);
 
   const currentFormula = useMemo(() => {
-    if (selectedExample) {
+    if (selectedExample && selectedExample !== CUSTOM_OPTION) {
       const ex = EXAMPLE_FORMULAS.find((e) => e.name === selectedExample);
       return ex?.formula ?? "";
     }
@@ -82,8 +83,8 @@ export function SATSolverDemo() {
   // Reveal only up to the *current step*
   const visibleEvent = useMemo(() => {
     if (!tree || !activeStepId) return 0;
-    if (activeStepId === FINISH_ID) return Number.POSITIVE_INFINITY; // toon & kleur alles
-    return tree.steps.get(activeStepId)?.createdAt ?? 0; // stap-voor-stap
+    if (activeStepId === FINISH_ID) return Number.POSITIVE_INFINITY; // show & color everything
+    return tree.steps.get(activeStepId)?.createdAt ?? 0; // step-by-step
   }, [tree, activeStepId]);
 
   const currentStep =
@@ -118,17 +119,13 @@ export function SATSolverDemo() {
         algorithm === "sat" ? solver.solveSAT(parsed) : solver.solve(parsed);
 
       const ord = getStepOrder(t);
-      setTree(t);
-      setOrder(ord);
-      setActiveStepId(t.rootId);
-      setIdx(ord.indexOf(t.rootId));
-      setRunConfig({ algo: algorithm, early: earlyStopping });
       const ordWithFinish = [...ord, FINISH_ID];
 
       setTree(t);
       setOrder(ordWithFinish);
       setActiveStepId(t.rootId);
       setIdx(ordWithFinish.indexOf(t.rootId));
+      setRunConfig({ algo: algorithm, early: earlyStopping });
     } catch (e) {
       console.error(e);
     }
@@ -161,16 +158,15 @@ export function SATSolverDemo() {
     setTree({ ...tree, steps: new Map(tree.steps) });
   };
 
-  // Ref naar de Textarea
+  // Ref to the Textarea
   const customRef = useRef<HTMLTextAreaElement>(null);
 
-  // Tekst invoegen op cursorpositie
+  // Insert text at caret and switch to custom mode
   function insertAtCursor(text: string) {
     const el = customRef.current;
     if (!el) return;
 
-    // als er een voorbeeld gekozen is, overschakelen naar custom invoer
-    setSelectedExample("");
+    setSelectedExample(CUSTOM_OPTION);
 
     const start = el.selectionStart ?? el.value.length;
     const end = el.selectionEnd ?? el.value.length;
@@ -178,7 +174,6 @@ export function SATSolverDemo() {
     const next = el.value.slice(0, start) + text + el.value.slice(end);
     setCustomFormula(next);
 
-    // Caret achter het ingevoegde stuk
     requestAnimationFrame(() => {
       el.focus();
       const pos = start + text.length;
@@ -186,7 +181,7 @@ export function SATSolverDemo() {
     });
   }
 
-  // Toonbare knoppen (inclusief ASCII en logische varianten)
+  // Symbol bar
   const SYMBOLS: { label: string; insert: string; title?: string }[] = [
     { label: "¬", insert: "¬", title: "NOT" },
     { label: "∧", insert: " ∧ ", title: "AND (∧)" },
@@ -194,6 +189,8 @@ export function SATSolverDemo() {
     { label: "(", insert: "(", title: "Open bracket" },
     { label: ")", insert: ")", title: "Close bracket" },
   ];
+
+  const showCustom = selectedExample === CUSTOM_OPTION;
 
   return (
     <div className="flex h-screen bg-background">
@@ -207,18 +204,18 @@ export function SATSolverDemo() {
         </CardHeader>
 
         <div className="w-80 shrink-0 border-r bg-card p-6 overflow-y-auto">
-          {/* Choose Formula (dropdown + custom) */}
+          {/* Choose Formula (dropdown + custom option) */}
           <div className="space-y-2 mb-4">
             <Label className="text-sm font-medium">Choose Formula</Label>
             <Select
               value={selectedExample}
               onValueChange={(v) => {
                 setSelectedExample(v);
-                setCustomFormula("");
+                if (v !== CUSTOM_OPTION) setCustomFormula("");
               }}
             >
               <SelectTrigger className="text-xs">
-                <SelectValue placeholder="Select example..." />
+                <SelectValue placeholder="Select example or choose own..." />
               </SelectTrigger>
               <SelectContent>
                 {EXAMPLE_FORMULAS.map((ex) => (
@@ -226,45 +223,51 @@ export function SATSolverDemo() {
                     {ex.name}
                   </SelectItem>
                 ))}
+                <Separator className="my-1" />
+                <SelectItem value={CUSTOM_OPTION} className="text-xs">
+                  Own formula (enter your own)
+                </SelectItem>
               </SelectContent>
             </Select>
 
-            <div className="text-center text-xs text-muted-foreground">or</div>
+            {/* Custom input shown only when custom is selected */}
+            {showCustom && (
+              <>
+                <div className="flex flex-wrap gap-2 mb-2 mt-2">
+                  {SYMBOLS.map((s) => (
+                    <Button
+                      key={s.label}
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => insertAtCursor(s.insert)}
+                      title={s.title ?? s.label}
+                      className="px-2"
+                    >
+                      {s.label}
+                    </Button>
+                  ))}
+                </div>
 
-            {/* ⬇️ Symboolbalk */}
-            <div className="flex flex-wrap gap-2 mb-2">
-              {SYMBOLS.map((s) => (
-                <Button
-                  key={s.label}
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => insertAtCursor(s.insert)}
-                  title={s.title ?? s.label}
-                  className="px-2"
-                >
-                  {s.label}
-                </Button>
-              ))}
-            </div>
+                <Textarea
+                  ref={customRef}
+                  placeholder="Enter custom formula..."
+                  value={customFormula}
+                  onChange={(e) => {
+                    setCustomFormula(e.target.value);
+                    setSelectedExample(CUSTOM_OPTION);
+                  }}
+                  className="min-h-16 text-xs font-mono"
+                />
+              </>
+            )}
+
+            {currentFormula && (
+              <div className="p-2 bg-muted rounded text-xs font-mono break-all mt-2">
+                {currentFormula}
+              </div>
+            )}
           </div>
-
-          <Textarea
-            ref={customRef}
-            placeholder="Enter custom formula..."
-            value={customFormula}
-            onChange={(e) => {
-              setCustomFormula(e.target.value);
-              setSelectedExample("");
-            }}
-            className="min-h-16 text-xs font-mono"
-          />
-
-          {currentFormula && (
-            <div className="p-2 bg-muted rounded text-xs font-mono break-all mb-4">
-              {currentFormula}
-            </div>
-          )}
 
           {/* Algorithm */}
           <div className="space-y-2 mb-4">
@@ -402,12 +405,12 @@ export function SATSolverDemo() {
                       )}
                     </div>
 
-                    {/* jouw bestaande ‘korte’ uitleg */}
+                    {/* short explanation */}
                     <div className="text-xs text-muted-foreground">
                       {displayStep.explanation}
                     </div>
 
-                    {/* ⬇️ extra clausule-uitleg, direct eronder (geen extra card/knoppen) */}
+                    {/* clause effects directly under it */}
                     {tree && activeStepId !== FINISH_ID && (
                       <ClauseEffects tree={tree} activeStepId={activeStepId} />
                     )}
