@@ -849,7 +849,7 @@ export default function MinimaxDemo() {
   }, []);
 
   // ========== Layout in WORLD coordinates ==========
-  const NODE_SIZE = 64;
+  const NODE_SIZE = 80;
   const LABEL_GAP = 18;
   const LEVEL_H = 130;
   const MIN_SPACING = 110;
@@ -1408,13 +1408,28 @@ export default function MinimaxDemo() {
       (node.children?.length ?? 0) === 0 || node.value !== undefined;
 
     let textInside: string;
-    if (isLeaf) {
-      textInside = node.value !== undefined ? String(node.value) : "?";
-    } else if (alphaBetaPruning) {
-      // MAX toont β (gevuld met α-stroom), MIN toont α (gevuld met β-stroom)
-      textInside = node.isMax ? `β:${fmt(node.beta)}` : `α:${fmt(node.alpha)}`;
+    if (!alphaBetaPruning) {
+      // ZONDER α-β: toon de (tussen)minimax-waarde zodra die er is
+      if (isLeaf) {
+        textInside =
+          node.value !== undefined
+            ? String(node.value)
+            : node.finalValue !== undefined
+            ? String(node.finalValue)
+            : "?";
+      } else {
+        textInside =
+          node.finalValue !== undefined ? String(node.finalValue) : "?";
+      }
     } else {
-      textInside = "?";
+      // MET α-β: toon de α/β-chip-inhoud in de knoop
+      if (isLeaf) {
+        textInside = node.value !== undefined ? String(node.value) : "?";
+      } else {
+        textInside = node.isMax
+          ? `β:${fmt(node.beta)}`
+          : `α:${fmt(node.alpha)}`;
+      }
     }
 
     // Doosje zoals in je slide (naast de knoop)
@@ -1432,7 +1447,7 @@ export default function MinimaxDemo() {
       (node.isMax
         ? "bg-red-50 border-red-500 text-red-700"
         : "bg-green-50 border-green-600 text-green-700") +
-      " px-1.5 py-0.5 rounded-sm border text-[11px] font-semibold shadow-sm";
+      " px-1.5 py-0.5 rounded-sm border text-[17px] font-semibold shadow-sm";
 
     const nodeClass = `
       absolute rounded-full border-2 flex items-center justify-center text-sm font-semibold transition-all duration-300
@@ -1457,7 +1472,7 @@ export default function MinimaxDemo() {
           }}
         >
           <div className="text-center">
-            <div className="text-xs font-bold text-gray-800">{textInside}</div>
+            <div className="text-xl font-bold text-gray-800">{textInside}</div>
           </div>
         </div>
 
@@ -1543,21 +1558,24 @@ export default function MinimaxDemo() {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Control Panel */}
+
           {!fullscreen && (
-            <Card className="lg:col-span-1 bg-white border-gray-200">
-              <CardHeader>
+            <Card className="lg:col-span-1 bg-white border-gray-200 h-fit">
+              <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2">
                   <Settings className="w-5 h-5" />
                   Controls
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div>
+
+              <CardContent className="space-y-5">
+                {/* Tree select */}
+                <div className="space-y-1">
                   <Label
                     htmlFor="tree-select"
                     className="text-sm font-medium text-gray-700"
                   >
-                    Tree Type
+                    Choose Exercise{" "}
                   </Label>
                   <Select
                     value={selectedTree}
@@ -1565,7 +1583,7 @@ export default function MinimaxDemo() {
                       setSelectedTree(v)
                     }
                   >
-                    <SelectTrigger className="mt-1">
+                    <SelectTrigger id="tree-select" className="mt-1 w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1578,50 +1596,59 @@ export default function MinimaxDemo() {
                   </Select>
                 </div>
 
-                <div>
+                {/* Alpha-Beta switch */}
+                <div className="space-y-1">
                   <Label className="text-sm font-medium text-gray-700">
                     Alpha-Beta Pruning
                   </Label>
-                  <div className="flex items-center space-x-2 mt-2">
-                    <Switch
-                      id="alpha-beta"
-                      checked={alphaBetaPruning}
-                      onCheckedChange={setAlphaBetaPruning}
-                    />
-                    <Label
-                      htmlFor="alpha-beta"
-                      className="text-sm text-gray-600"
-                    >
-                      {alphaBetaPruning ? "On" : "Off"}
-                    </Label>
+                  <div className="mt-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="alpha-beta"
+                        checked={alphaBetaPruning}
+                        onCheckedChange={setAlphaBetaPruning}
+                      />
+                      <Label
+                        htmlFor="alpha-beta"
+                        className="text-sm text-gray-600 select-none"
+                      >
+                        {alphaBetaPruning ? "On" : "Off"}
+                      </Label>
+                    </div>
                   </div>
                 </div>
 
+                {/* Step & reset buttons */}
                 <div className="space-y-2">
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <Button
                       onClick={stepBack}
                       variant="outline"
+                      size="sm"
                       disabled={currentStep === 0}
-                      className="flex-1 text-sm bg-transparent"
+                      className="w-full"
                     >
                       <ChevronLeft className="w-4 h-4 mr-1" />
                       Step Back
                     </Button>
+
                     <Button
                       onClick={stepForward}
-                      variant="outline"
+                      variant="default"
+                      size="sm"
                       disabled={currentStep >= steps.length - 1}
-                      className="flex-1 text-sm"
+                      className="w-full"
                     >
-                      Step Forward
+                      Next Step
                       <ChevronRight className="w-4 h-4 ml-1" />
                     </Button>
                   </div>
+
                   <Button
                     onClick={resetTree}
-                    variant="outline"
-                    className="w-full text-sm bg-transparent"
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
                   >
                     <RotateCcw className="w-4 h-4 mr-2" />
                     Reset
