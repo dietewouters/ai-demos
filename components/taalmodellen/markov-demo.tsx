@@ -35,7 +35,7 @@ export const MarkovDemo = () => {
           <TabsList className=" w-full">
             {/*<TabsTrigger value="input">Input</TabsTrigger>*/}
             <TabsTrigger value="autocomplete">Autocomplete</TabsTrigger>
-            <TabsTrigger value="table">Kansentabel</TabsTrigger>
+            <TabsTrigger value="table">Probability table</TabsTrigger>
           </TabsList>
           <MarkovModelSelector model={model} onChangeAction={setModel} />
           <TabsContent value="table" className="space-y-4">

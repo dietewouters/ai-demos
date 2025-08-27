@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
+import { RotateCcw, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import type { JSX } from "react/jsx-runtime";
 
 /**
@@ -1545,11 +1545,9 @@ export default function MinimaxDemo() {
           {/* Control Panel */}
           {!fullscreen && (
             <Card className="lg:col-span-1 bg-white border-gray-200">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
-                  <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center">
-                    ⚙️
-                  </div>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5" />
                   Controls
                 </CardTitle>
               </CardHeader>

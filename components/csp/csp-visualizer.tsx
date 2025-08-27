@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -20,7 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltips";
-import { RotateCcw, StepForward, Maximize2 } from "lucide-react";
+import { RotateCcw, StepForward, Maximize2, Settings } from "lucide-react";
 
 import {
   type CSP,
@@ -788,6 +788,12 @@ export default function CSPVisualizer() {
         </header>
 
         <Card className="p-4">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              Controls
+            </CardTitle>
+          </CardHeader>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
             <div className="lg:col-span-3 space-y-4">
               <div className="space-y-2">

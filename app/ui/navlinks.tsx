@@ -30,7 +30,7 @@ const links: LinkItem[] = [
     name: "CSP",
     // href: "/mainpage/csp",
     children: [
-      { name: "General", href: "/mainpage/csp/general" },
+      { name: "Backtracking", href: "/mainpage/csp/general" },
       { name: "Forward checking", href: "/mainpage/csp/fc" },
       { name: "AC-3", href: "/mainpage/csp/ac-3" },
     ],
@@ -52,13 +52,13 @@ const links: LinkItem[] = [
   {
     name: "LLMs",
     // href: "/mainpage/llms",
-    children: [{ name: "General", href: "/mainpage/llms/general" }],
+    children: [{ name: "N-grams", href: "/mainpage/llms/general" }],
   },
   {
     name: "Bayesian Nets",
     // href: "/mainpage/bayesiannets",
     children: [
-      { name: "General", href: "/mainpage/bayesiannets/general" },
+      { name: "Probabilities", href: "/mainpage/bayesiannets/general" },
       { name: "Construction", href: "/mainpage/bayesiannets/construction" },
       { name: "Markov Blanket", href: "/mainpage/bayesiannets/markovblanket" },
       { name: "Independence", href: "/mainpage/bayesiannets/dsep" },

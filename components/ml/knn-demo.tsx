@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Settings } from "lucide-react";
 
 interface Point {
   x: number;
@@ -234,7 +235,10 @@ export default function KNNDemo() {
       {/* Controls */}
       <Card className="lg:col-span-1">
         <CardHeader>
-          <CardTitle>Controls</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="w-5 h-5" />
+            Controls
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Dataset selector */}

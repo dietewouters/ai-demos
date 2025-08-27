@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 
 import { parseFormula } from "@/components/solvers/lib/formula-parser";
 import type { Formula } from "@/components/solvers/lib/dpll-types";
+import { Settings } from "lucide-react";
 
 const EXAMPLE_FORMULAS = [
   { name: "Example of DPLL", formula: "(x ∨ w) ∧ (y ∨ z)" },
@@ -299,127 +300,134 @@ export function WMCDemo() {
   return (
     <div className="flex h-screen bg-background">
       {/* Controls */}
-      <div className="w-80 shrink-0 border-r bg-card p-6 overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-4">Weighted Model Counting</h2>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="w-5 h-5" />
+            Controls
+          </CardTitle>
+        </CardHeader>
 
-        {/* Formula selection */}
-        <div className="space-y-2 mb-3">
-          <Label className="text-sm font-medium">Choose Formula</Label>
-          <Select
-            value={selectedExample}
-            onValueChange={(v) => {
-              setSelectedExample(v);
-            }}
-          >
-            <SelectTrigger className="text-xs">
-              <SelectValue placeholder="Select example..." />
-            </SelectTrigger>
-            <SelectContent>
-              {EXAMPLE_FORMULAS.map((ex) => (
-                <SelectItem key={ex.name} value={ex.name} className="text-xs">
-                  {ex.name}
-                </SelectItem>
+        <div className="w-80 shrink-0 border-r bg-card p-6 overflow-y-auto">
+          {/* Formula selection */}
+          <div className="space-y-2 mb-3">
+            <Label className="text-sm font-medium">Choose Formula</Label>
+            <Select
+              value={selectedExample}
+              onValueChange={(v) => {
+                setSelectedExample(v);
+              }}
+            >
+              <SelectTrigger className="text-xs">
+                <SelectValue placeholder="Select example..." />
+              </SelectTrigger>
+              <SelectContent>
+                {EXAMPLE_FORMULAS.map((ex) => (
+                  <SelectItem key={ex.name} value={ex.name} className="text-xs">
+                    {ex.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="text-center text-xs text-muted-foreground">or</div>
+            {/* ⬇️ Symboolbalk */}
+            <div className="flex flex-wrap gap-2 mb-2">
+              {SYMBOLS.map((s) => (
+                <Button
+                  key={s.label}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => insertAtCursor(s.insert)}
+                  title={s.title ?? s.label}
+                  className="px-2"
+                >
+                  {s.label}
+                </Button>
               ))}
-            </SelectContent>
-          </Select>
-          <div className="text-center text-xs text-muted-foreground">or</div>
-          {/* ⬇️ Symboolbalk */}
-          <div className="flex flex-wrap gap-2 mb-2">
-            {SYMBOLS.map((s) => (
-              <Button
-                key={s.label}
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => insertAtCursor(s.insert)}
-                title={s.title ?? s.label}
-                className="px-2"
-              >
-                {s.label}
-              </Button>
-            ))}
+            </div>
+
+            <Textarea
+              ref={customRef}
+              placeholder="Enter custom formula..."
+              value={customFormula}
+              onChange={(e) => {
+                setCustomFormula(e.target.value);
+                setSelectedExample("");
+              }}
+              className="min-h-16 text-xs font-mono"
+            />
           </div>
 
-          <Textarea
-            ref={customRef}
-            placeholder="Enter custom formula..."
-            value={customFormula}
-            onChange={(e) => {
-              setCustomFormula(e.target.value);
-              setSelectedExample("");
-            }}
-            className="min-h-16 text-xs font-mono"
-          />
-        </div>
+          <div className="p-2 bg-muted rounded text-xs font-mono break-all mb-4">
+            {formulaText || "No formula"}
+          </div>
 
-        <div className="p-2 bg-muted rounded text-xs font-mono break-all mb-4">
-          {formulaText || "No formula"}
-        </div>
+          <Button className="w-full mb-4" onClick={build} disabled={!isReady}>
+            Build Table
+          </Button>
 
-        <Button className="w-full mb-4" onClick={build} disabled={!isReady}>
-          Build Table
-        </Button>
+          {variables.length > 0 && (
+            <>
+              <Separator className="my-3" />
+              <div className="flex items-center justify-between mb-1">
+                <Label className="text-sm font-medium">P(X = true)</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => {
+                    const p: ProbMap = {};
+                    variables.forEach((v) => (p[v] = 0.5));
+                    setProbs(p);
+                  }}
+                >
+                  Reset 0.5
+                </Button>
+              </div>
 
-        {variables.length > 0 && (
-          <>
-            <Separator className="my-3" />
-            <div className="flex items-center justify-between mb-1">
-              <Label className="text-sm font-medium">P(X = true)</Label>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs"
-                onClick={() => {
-                  const p: ProbMap = {};
-                  variables.forEach((v) => (p[v] = 0.5));
-                  setProbs(p);
-                }}
-              >
-                Reset 0.5
-              </Button>
-            </div>
-
-            <div className="space-y-3">
-              {variables.map((v) => (
-                <div key={v} className="space-y-1">
-                  {/* alleen de variabele-naam links (geen “kans boven de kans”) */}
-                  <div className="text-xs font-mono">{v}</div>
-                  <div className="flex items-center gap-2">
-                    <Slider
-                      value={[probs[v] ?? 0.5]}
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      onValueChange={(val) =>
-                        setProbs((pm) => ({ ...pm, [v]: val[0] }))
-                      }
-                      className="flex-1"
-                    />
-                    <Input
-                      type="number"
-                      className="w-20 h-8"
-                      min={0}
-                      max={1}
-                      step="0.01"
-                      value={probs[v] ?? 0.5}
-                      onChange={(e) => {
-                        const num = Math.max(
-                          0,
-                          Math.min(1, Number(e.target.value))
-                        );
-                        setProbs((pm) => ({
-                          ...pm,
-                          [v]: isFinite(num) ? num : 0,
-                        }));
-                      }}
-                    />
+              <div className="space-y-3">
+                {variables.map((v) => (
+                  <div key={v} className="space-y-1">
+                    {/* alleen de variabele-naam links (geen “kans boven de kans”) */}
+                    <div className="text-xs font-mono">{v}</div>
+                    <div className="flex items-center gap-2">
+                      <Slider
+                        value={[probs[v] ?? 0.5]}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onValueChange={(val) =>
+                          setProbs((pm) => ({ ...pm, [v]: val[0] }))
+                        }
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        className="w-20 h-8"
+                        min={0}
+                        max={1}
+                        step="0.01"
+                        value={probs[v] ?? 0.5}
+                        onChange={(e) => {
+                          const num = Math.max(
+                            0,
+                            Math.min(1, Number(e.target.value))
+                          );
+                          setProbs((pm) => ({
+                            ...pm,
+                            [v]: isFinite(num) ? num : 0,
+                          }));
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </Card>
 
       {/* Right: results + table */}
       <div className="flex-1 p-6 overflow-y-auto">

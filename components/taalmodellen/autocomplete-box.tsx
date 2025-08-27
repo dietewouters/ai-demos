@@ -285,7 +285,7 @@ const SuggestionsBox: React.FC<{
             className="text-center"
             onClick={() => onStartNewLine()}
           >
-            Start nieuwe lijn
+            Start new line
           </Button>
         </div>
       )}

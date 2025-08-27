@@ -103,12 +103,12 @@ const MarkovModelTable: React.FC<{
         <TableHeader>
           <TableRow className="py-1 font-semibold">
             {model.order >= 1 && (
-              <TableCell>Vorige woord{model.order > 1 && "en"}</TableCell>
+              <TableCell>Previous word{model.order > 1 && "s"}</TableCell>
             )}
-            <TableCell>Volgende woord</TableCell>
-            {showCount && <TableCell className="text-right">Aantal</TableCell>}
+            <TableCell>Next word</TableCell>
+            {showCount && <TableCell className="text-right">Number</TableCell>}
             {showProbability && (
-              <TableCell className="text-right">Kans</TableCell>
+              <TableCell className="text-right">Probability</TableCell>
             )}
           </TableRow>
         </TableHeader>

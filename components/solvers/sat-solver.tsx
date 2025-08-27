@@ -198,233 +198,235 @@ export function SATSolverDemo() {
   return (
     <div className="flex h-screen bg-background">
       {/* Controls */}
-      <CardHeader className="items-start">
-        <CardTitle className="flex items-center gap-2 text-left leading-6">
-          <Settings className="w-5 h-5 shrink-0" />
-          Controls
-        </CardTitle>
-      </CardHeader>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="w-5 h-5" />
+            Controls
+          </CardTitle>
+        </CardHeader>
 
-      <div className="w-80 shrink-0 border-r bg-card p-6 overflow-y-auto">
-        {/* Choose Formula (dropdown + custom) */}
-        <div className="space-y-2 mb-4">
-          <Label className="text-sm font-medium">Choose Formula</Label>
-          <Select
-            value={selectedExample}
-            onValueChange={(v) => {
-              setSelectedExample(v);
-              setCustomFormula("");
-            }}
-          >
-            <SelectTrigger className="text-xs">
-              <SelectValue placeholder="Select example..." />
-            </SelectTrigger>
-            <SelectContent>
-              {EXAMPLE_FORMULAS.map((ex) => (
-                <SelectItem key={ex.name} value={ex.name} className="text-xs">
-                  {ex.name}
-                </SelectItem>
+        <div className="w-80 shrink-0 border-r bg-card p-6 overflow-y-auto">
+          {/* Choose Formula (dropdown + custom) */}
+          <div className="space-y-2 mb-4">
+            <Label className="text-sm font-medium">Choose Formula</Label>
+            <Select
+              value={selectedExample}
+              onValueChange={(v) => {
+                setSelectedExample(v);
+                setCustomFormula("");
+              }}
+            >
+              <SelectTrigger className="text-xs">
+                <SelectValue placeholder="Select example..." />
+              </SelectTrigger>
+              <SelectContent>
+                {EXAMPLE_FORMULAS.map((ex) => (
+                  <SelectItem key={ex.name} value={ex.name} className="text-xs">
+                    {ex.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <div className="text-center text-xs text-muted-foreground">or</div>
+
+            {/* ⬇️ Symboolbalk */}
+            <div className="flex flex-wrap gap-2 mb-2">
+              {SYMBOLS.map((s) => (
+                <Button
+                  key={s.label}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => insertAtCursor(s.insert)}
+                  title={s.title ?? s.label}
+                  className="px-2"
+                >
+                  {s.label}
+                </Button>
               ))}
-            </SelectContent>
-          </Select>
+            </div>
+          </div>
 
-          <div className="text-center text-xs text-muted-foreground">or</div>
+          <Textarea
+            ref={customRef}
+            placeholder="Enter custom formula..."
+            value={customFormula}
+            onChange={(e) => {
+              setCustomFormula(e.target.value);
+              setSelectedExample("");
+            }}
+            className="min-h-16 text-xs font-mono"
+          />
 
-          {/* ⬇️ Symboolbalk */}
-          <div className="flex flex-wrap gap-2 mb-2">
-            {SYMBOLS.map((s) => (
+          {currentFormula && (
+            <div className="p-2 bg-muted rounded text-xs font-mono break-all mb-4">
+              {currentFormula}
+            </div>
+          )}
+
+          {/* Algorithm */}
+          <div className="space-y-2 mb-4">
+            <Label className="text-sm font-medium">Algorithm</Label>
+            <Select
+              value={algorithm}
+              onValueChange={(v) => setAlgorithm(v as "dpll" | "sat")}
+            >
+              <SelectTrigger className="text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dpll" className="text-xs">
+                  DPLL
+                </SelectItem>
+                <SelectItem value="sat" className="text-xs">
+                  #SAT
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
+            {algorithm === "dpll" && (
+              <div className="space-y-2 p-3 bg-muted/50 rounded">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="unit-prop"
+                    checked={unitPropagation}
+                    onCheckedChange={(c) => setUnitPropagation(Boolean(c))}
+                  />
+                  <Label htmlFor="unit-prop" className="text-xs">
+                    Unit Propagation
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="early-stop"
+                    checked={earlyStopping}
+                    onCheckedChange={(c) => setEarlyStopping(Boolean(c))}
+                  />
+                  <Label htmlFor="early-stop" className="text-xs">
+                    Early Stopping
+                  </Label>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Start */}
+          <Button className="w-full mb-4" disabled={!isReady} onClick={start}>
+            Start Solving
+          </Button>
+
+          {/* After-run actions */}
+          {tree &&
+            runConfig?.algo === "dpll" &&
+            runConfig?.early === false &&
+            !hasModelCounts && (
               <Button
-                key={s.label}
-                type="button"
                 variant="secondary"
-                size="sm"
-                onClick={() => insertAtCursor(s.insert)}
-                title={s.title ?? s.label}
-                className="px-2"
+                className="w-full mb-4"
+                onClick={calcModels}
               >
-                {s.label}
+                Calculate number of models
               </Button>
-            ))}
-          </div>
-        </div>
+            )}
 
-        <Textarea
-          ref={customRef}
-          placeholder="Enter custom formula..."
-          value={customFormula}
-          onChange={(e) => {
-            setCustomFormula(e.target.value);
-            setSelectedExample("");
-          }}
-          className="min-h-16 text-xs font-mono"
-        />
-
-        {currentFormula && (
-          <div className="p-2 bg-muted rounded text-xs font-mono break-all mb-4">
-            {currentFormula}
-          </div>
-        )}
-
-        {/* Algorithm */}
-        <div className="space-y-2 mb-4">
-          <Label className="text-sm font-medium">Algorithm</Label>
-          <Select
-            value={algorithm}
-            onValueChange={(v) => setAlgorithm(v as "dpll" | "sat")}
-          >
-            <SelectTrigger className="text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="dpll" className="text-xs">
-                DPLL
-              </SelectItem>
-              <SelectItem value="sat" className="text-xs">
-                #SAT
-              </SelectItem>
-            </SelectContent>
-          </Select>
-
-          {algorithm === "dpll" && (
-            <div className="space-y-2 p-3 bg-muted/50 rounded">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="unit-prop"
-                  checked={unitPropagation}
-                  onCheckedChange={(c) => setUnitPropagation(Boolean(c))}
-                />
-                <Label htmlFor="unit-prop" className="text-xs">
-                  Unit Propagation
-                </Label>
+          {/* Step navigation */}
+          {tree && (
+            <>
+              <Separator className="my-3" />
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-sm font-medium">Step Navigation</Label>
+                <Badge variant="outline" className="text-xs">
+                  {idx + 1} / {order.length}
+                </Badge>
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="early-stop"
-                  checked={earlyStopping}
-                  onCheckedChange={(c) => setEarlyStopping(Boolean(c))}
-                />
-                <Label htmlFor="early-stop" className="text-xs">
-                  Early Stopping
-                </Label>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs bg-transparent"
+                  onClick={prev}
+                  disabled={idx === 0}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs bg-transparent"
+                  onClick={next}
+                  disabled={idx >= order.length - 1}
+                >
+                  Next
+                </Button>
               </div>
-            </div>
-          )}
-        </div>
 
-        {/* Start */}
-        <Button className="w-full mb-4" disabled={!isReady} onClick={start}>
-          Start Solving
-        </Button>
-
-        {/* After-run actions */}
-        {tree &&
-          runConfig?.algo === "dpll" &&
-          runConfig?.early === false &&
-          !hasModelCounts && (
-            <Button
-              variant="secondary"
-              className="w-full mb-4"
-              onClick={calcModels}
-            >
-              Calculate number of models
-            </Button>
-          )}
-
-        {/* Step navigation */}
-        {tree && (
-          <>
-            <Separator className="my-3" />
-            <div className="flex items-center justify-between mb-2">
-              <Label className="text-sm font-medium">Step Navigation</Label>
-              <Badge variant="outline" className="text-xs">
-                {idx + 1} / {order.length}
-              </Badge>
-            </div>
-
-            <div className="flex gap-2">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="flex-1 text-xs bg-transparent"
-                onClick={prev}
-                disabled={idx === 0}
+                className="w-full text-xs mt-2"
+                onClick={reset}
               >
-                Previous
+                Reset
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 text-xs bg-transparent"
-                onClick={next}
-                disabled={idx >= order.length - 1}
-              >
-                Next
-              </Button>
-            </div>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full text-xs mt-2"
-              onClick={reset}
-            >
-              Reset
-            </Button>
-
-            {/* Current step info (gated) */}
-            {displayStep && (
-              <>
-                <Separator className="my-3" />
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      variant={
-                        displayStep.result === "SAT"
-                          ? "default"
-                          : displayStep.result === "UNSAT"
-                          ? "destructive"
-                          : "secondary"
-                      }
-                      className="text-xs"
-                    >
-                      {displayStep.type === "split"
-                        ? "Split"
-                        : displayStep.type === "unit-propagation"
-                        ? "Unit Prop"
-                        : displayStep.result || "Processing"}
-                    </Badge>
-
-                    {typeof displayStep.modelCount === "number" && (
-                      <Badge variant="outline" className="text-xs">
-                        {displayStep.modelCount} models
+              {/* Current step info (gated) */}
+              {displayStep && (
+                <>
+                  <Separator className="my-3" />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={
+                          displayStep.result === "SAT"
+                            ? "default"
+                            : displayStep.result === "UNSAT"
+                            ? "destructive"
+                            : "secondary"
+                        }
+                        className="text-xs"
+                      >
+                        {displayStep.type === "split"
+                          ? "Split"
+                          : displayStep.type === "unit-propagation"
+                          ? "Unit Prop"
+                          : displayStep.result || "Processing"}
                       </Badge>
+
+                      {typeof displayStep.modelCount === "number" && (
+                        <Badge variant="outline" className="text-xs">
+                          {displayStep.modelCount} models
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* jouw bestaande ‘korte’ uitleg */}
+                    <div className="text-xs text-muted-foreground">
+                      {displayStep.explanation}
+                    </div>
+
+                    {/* ⬇️ extra clausule-uitleg, direct eronder (geen extra card/knoppen) */}
+                    {tree && activeStepId !== FINISH_ID && (
+                      <ClauseEffects tree={tree} activeStepId={activeStepId} />
                     )}
                   </div>
+                </>
+              )}
 
-                  {/* jouw bestaande ‘korte’ uitleg */}
+              {activeStepId === FINISH_ID && (
+                <>
+                  <Separator className="my-3" />
                   <div className="text-xs text-muted-foreground">
-                    {displayStep.explanation}
+                    Finished – full tree shown.
                   </div>
-
-                  {/* ⬇️ extra clausule-uitleg, direct eronder (geen extra card/knoppen) */}
-                  {tree && activeStepId !== FINISH_ID && (
-                    <ClauseEffects tree={tree} activeStepId={activeStepId} />
-                  )}
-                </div>
-              </>
-            )}
-
-            {activeStepId === FINISH_ID && (
-              <>
-                <Separator className="my-3" />
-                <div className="text-xs text-muted-foreground">
-                  Finished – full tree shown.
-                </div>
-              </>
-            )}
-          </>
-        )}
-      </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </Card>
 
       {/* Visualization */}
       <div className="flex-1 p-6">
