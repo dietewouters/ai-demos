@@ -5,9 +5,6 @@ export default function Home() {
   return (
     <main className="container max-w-6xl mx-auto p-4 py-8">
       <h1 className="text-3xl font-bold mb-3">Neural Networks</h1>
-      <p className="text-gray-700 mb-6">
-        Here you can find a demo for neural networks.
-      </p>
 
       <a
         href={DEMO_URL}

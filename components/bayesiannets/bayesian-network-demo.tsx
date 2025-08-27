@@ -687,8 +687,6 @@ export default function BayesianNetworkDemo() {
   return (
     <div className="bg-card rounded-lg border shadow-sm p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-        <h2 className="text-2xl font-bold">Bayesian Network Demo</h2>
-
         <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
           <label htmlFor="network-select" className="font-medium text-gray-700">
             Select Network:

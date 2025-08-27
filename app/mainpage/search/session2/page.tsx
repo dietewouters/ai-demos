@@ -7,10 +7,7 @@ export default function Home() {
       <h1 className="text-3xl font-bold mb-6">
         Advanced Search Algorithms Demo
       </h1>
-      <h1 className="text-gray-700">
-        Here is a demo about search algorithms seen in exercise sessions 1 and
-        2.
-      </h1>
+
       <br />
       <SearchDemo algorithms={algorithms2} />
     </main>

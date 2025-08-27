@@ -767,7 +767,7 @@ export default function CSPVisualizer() {
 
   return (
     <TooltipProvider delayDuration={100}>
-      <div className="mx-auto max-w-7xl p-4 md:p-6 space-y-4">
+      <div className="mx-auto max-w-7xl px-4 md:px-6 pb-6 space-y-4 pt-0 md:pt-0">
         <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-1"></div>
           <div className="flex items-center gap-1">
@@ -788,12 +788,11 @@ export default function CSPVisualizer() {
         </header>
 
         <Card className="p-4">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="w-5 h-5" />
-              Controls
-            </CardTitle>
-          </CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="w-5 h-5" />
+            Controls
+          </CardTitle>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
             <div className="lg:col-span-3 space-y-4">
               <div className="space-y-2">

@@ -6,9 +6,9 @@ export default function Home() {
       <h1 className="text-3xl font-bold mb-6">
         Constraint Satisfaction Problems
       </h1>
-      <h1 className="text-gray-700">Here is a demo about CSP's.</h1>
-      <br />
-      <CSPVisualizer />
+      <section className="-mt-4 md:-mt-6">
+        <CSPVisualizer />
+      </section>
     </main>
   );
 }
