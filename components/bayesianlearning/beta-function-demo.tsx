@@ -3,6 +3,13 @@
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "@/components/ui/accordion";
+import { ChevronDown } from "lucide-react";
 
 // Beta function calculation
 function betaFunction(a: number, b: number): number {
@@ -19,20 +26,52 @@ function gamma(z: number): number {
   return Math.sqrt((2 * Math.PI) / z) * Math.pow(z / Math.E, z);
 }
 
-// Beta PDF calculation
+// Beta PDF calculation (correct at boundaries)
 function betaPDF(x: number, a: number, b: number): number {
-  if (x <= 0 || x >= 1) return 0;
+  if (x < 0 || x > 1) return 0;
+
   const B = betaFunction(a, b);
+
+  // Boundary behavior
+  if (x === 0) {
+    if (a < 1) return Number.POSITIVE_INFINITY; // diverges at 0
+    if (a === 1) return 1 / B; // finite, nonzero
+    return 0; // a > 1
+  }
+  if (x === 1) {
+    if (b < 1) return Number.POSITIVE_INFINITY; // diverges at 1
+    if (b === 1) return 1 / B; // finite, nonzero
+    return 0; // b > 1
+  }
+
+  // Interior
   return (Math.pow(x, a - 1) * Math.pow(1 - x, b - 1)) / B;
 }
 
-// Generate curve points
+// Generate curve points (sample near edges if needed)
 function generateCurve(a: number, b: number, points = 200) {
   const data = [] as { x: number; y: number }[];
+
+  // small epsilon to sample near edges when PDF diverges
+  const eps = 1e-4;
+
   for (let i = 0; i <= points; i++) {
-    const x = i / points;
-    const y = x === 0 || x === 1 ? 0 : betaPDF(x, a, b);
-    data.push({ x, y });
+    let x = i / points;
+
+    // If the pdf would be infinite at the exact boundary, sample just inside
+    if (x === 0 && a < 1) x = eps;
+    if (x === 1 && b < 1) x = 1 - eps;
+
+    let y = betaPDF(x, a, b);
+
+    // If still infinite for numerical reasons, nudge slightly inward
+    if (!Number.isFinite(y)) {
+      if (x === 0) x = eps;
+      else if (x === 1) x = 1 - eps;
+      y = betaPDF(x, a, b);
+    }
+
+    data.push({ x, y: Number.isFinite(y) ? y : 0 });
   }
   return data;
 }
@@ -65,16 +104,26 @@ export default function BetaFunctionDemo() {
   const variance =
     (a[0] * b[0]) / (Math.pow(a[0] + b[0], 2) * (a[0] + b[0] + 1));
 
-  // MAP cases
+  // MAP cases (correct boundary ordering)
   const mapInfo = useMemo<MapInfo>(() => {
     const A = a[0],
       B = b[0];
+
     if (A === 1 && B === 1) return { kind: "flat", xs: [] };
     if (A > 1 && B > 1)
       return { kind: "interior", xs: [(A - 1) / (A + B - 2)] };
-    if (A <= 1 && B <= 1) return { kind: "both", xs: [0, 1] };
-    if (A <= 1) return { kind: "left", xs: [0] };
-    return { kind: "right", xs: [1] };
+    if (A < 1 && B < 1) return { kind: "both", xs: [0, 1] };
+
+    // Prefer the boundary that actually diverges
+    if (B < 1) return { kind: "right", xs: [1] }; // mode at θ=1
+    if (A < 1) return { kind: "left", xs: [0] }; // mode at θ=0
+
+    // Handle exact-equals-1 edge cases
+    if (A === 1 && B > 1) return { kind: "left", xs: [0] };
+    if (B === 1 && A > 1) return { kind: "right", xs: [1] };
+
+    // Fallback (shouldn't be reached)
+    return { kind: "interior", xs: [(A - 1) / (A + B - 2)] };
   }, [a, b]);
 
   // SVG dims
@@ -116,15 +165,15 @@ export default function BetaFunctionDemo() {
       };
     }
     if (mapInfo.kind === "left") {
-      return { title: `MAP = 0`, sub: `a = ${fmt1(A)} ≤ 1 ⇒ θ = 0` };
+      return { title: `MAP = 0`, sub: `a = ${fmt1(A)} < 1 ⇒ θ = 0` };
     }
     if (mapInfo.kind === "right") {
-      return { title: `MAP = 1`, sub: `b = ${fmt1(B)} ≤ 1 ⇒ θ = 1` };
+      return { title: `MAP = 1`, sub: `b = ${fmt1(B)} < 1 ⇒ θ = 1` };
     }
     if (mapInfo.kind === "both") {
       return {
         title: `MAP not unique: 0 and 1`,
-        sub: `a = ${fmt1(A)} ≤ 1 en b = ${fmt1(B)} ≤ 1`,
+        sub: `a = ${fmt1(A)} < 1 en b = ${fmt1(B)} < 1`,
       };
     }
     return { title: `No unique MAP`, sub: `Uniform: a = 1, b = 1` };
@@ -132,29 +181,30 @@ export default function BetaFunctionDemo() {
 
   return (
     <div className="space-y-6">
-      {/* Uitlegkaart bovenaan */}
-      <Card>
-        <CardHeader>
-          <CardTitle>What is the Beta distribution?</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm leading-6">
+      {/* Collapsible explanation box */}
+      <details className="mt-6 rounded-lg border bg-card">
+        <summary className="cursor-pointer select-none p-4 font-medium">
+          What is the Beta distribution?
+        </summary>
+        <div className="px-4 pb-4 pt-0 text-sm leading-6">
           <p>
             We often use the beta distribution as a prior to estimate the
             probability of a certain parameter. The a and b are parameters that
             show a virtual count (a = positive examples and b = negative). The
             higher the values, the more certain we are of a certain probability,
-            e.g. (1,1), (2.2) and (5.5) all have the same mean (0.5), but are
+            e.g. (1,1), (2,2) and (5,5) all have the same mean (0.5), but are
             increasingly concentrated around the probability 0.5. More of a
             certain type of count shifts the probability in that direction:
             increasing a (= number of positive examples) brings the probability
             mass closer to the probability 1. Intuition: more ‘positive
-            examples’ ( <span className="font-mono">a</span> increase) shifts
-            mass to <span className="font-mono">θ = 1</span>; more "negative
-            examples" ( increase <span className="font-mono">b</span>) shifts
-            mass to <span className="font-mono">θ = 0</span>.
+            examples’ (<span className="font-mono">a</span> increase) shifts
+            mass to <span className="font-mono">θ = 1</span>; more “negative
+            examples” (increase <span className="font-mono">b</span>) shifts
+            mass to
+            <span className="font-mono"> θ = 0</span>.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </details>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Controls */}
@@ -256,7 +306,7 @@ export default function BetaFunctionDemo() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Beta Distribution Visualization</CardTitle>
-            {/* Vaste kaders naast elkaar */}
+            {/* Fixed badges side by side */}
             <div className="mt-2 flex flex-wrap gap-3">
               <div className="rounded-md bg-white/95 shadow-sm ring-1 ring-amber-400 px-3 py-2 text-sm font-medium text-amber-800">
                 <div className="font-bold">{meanBadge.title}</div>
