@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -94,16 +94,19 @@ export default function KNNDemo() {
   const activePoints = useMemo(() => DATASETS[datasetKey].points, [datasetKey]);
 
   const [k, setK] = useState<number>(3);
-  const [distanceMetric, setDistanceMetric] = useState<string>("euclidean"); // "euclidean" | "manhattan" | "minkowski"
-  const [minkowskiP, setMinkowskiP] = useState<number>(3); // for "Choose p"
+  const [distanceMetric, setDistanceMetric] = useState<string>("euclidean"); // "euclidean" | "manhattan" | "minkowski" (UI toont euclidean/manhattan)
+  const [minkowskiP, setMinkowskiP] = useState<number>(3); // indien je later Minkowski wil toevoegen
   const [queryPoint, setQueryPoint] = useState<QueryPoint>({ x: 7, y: 6 });
   const [showVoronoi, setShowVoronoi] = useState<boolean>(false);
-  const [showCalculations, setShowCalculations] = useState<boolean>(false); // collapsed by default
+  const VORONOI_RESOLUTION = 8; // px-celgrootte voor Voronoi raster
 
   const PLOT_WIDTH = (X_MAX - X_MIN) * SCALE;
   const PLOT_HEIGHT = (Y_MAX - Y_MIN) * SCALE;
   const SVG_WIDTH = OFFSET_X * 2 + PLOT_WIDTH;
   const SVG_HEIGHT = OFFSET_Y * 2 + PLOT_HEIGHT;
+
+  // Canvas ref voor de Voronoi overlay
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     // keep query point in bounds when switching datasets
@@ -113,7 +116,7 @@ export default function KNNDemo() {
     }));
   }, [datasetKey]);
 
-  // Distance
+  // Distance (voor tabellen/labels)
   const calculateDistance = useCallback(
     (p1: Point | QueryPoint, p2: Point | QueryPoint): number => {
       const dx = Math.abs(p1.x - p2.x);
@@ -125,11 +128,10 @@ export default function KNNDemo() {
         case "manhattan": // L1
           return dx + dy;
         case "minkowski": {
-          const p = Math.max(1, Math.round(minkowskiP)); // <-- ensure integer p ≥ 1
+          const p = Math.max(1, Math.round(minkowskiP));
           const sum = Math.pow(dx, p) + Math.pow(dy, p);
           return Math.pow(sum, 1 / p);
         }
-
         default:
           return Math.hypot(dx, dy);
       }
@@ -158,14 +160,14 @@ export default function KNNDemo() {
 
   const prediction = getPrediction();
 
-  // Query point styling based on predicted class (distinct look)
+  // Query point styling based on predicted class
   const queryStyle = useMemo(() => {
     if (prediction === "blue") {
-      return { fill: "#dbeafe", stroke: "#3b82f6", text: "#1e40af" }; // light blue fill + blue ring
+      return { fill: "#dbeafe", stroke: "#3b82f6", text: "#1e40af" };
     } else if (prediction === "orange") {
-      return { fill: "#ffedd5", stroke: "#f97316", text: "#9a3412" }; // light orange fill + orange ring
+      return { fill: "#ffedd5", stroke: "#f97316", text: "#9a3412" };
     }
-    return { fill: "#e5e7eb", stroke: "#6b7280", text: "#374151" }; // tie/neutral
+    return { fill: "#e5e7eb", stroke: "#6b7280", text: "#374151" };
   }, [prediction]);
 
   // Click handling
@@ -179,54 +181,102 @@ export default function KNNDemo() {
     });
   };
 
-  // Voronoi-like k-NN decision regions
-  const voronoiCells = useMemo(() => {
-    if (!showVoronoi) return [];
+  // --- Snelle top-K stemfunctie zonder sort + zonder sqrt ---
+  const voteAt = useCallback(
+    (x: number, y: number): "blue" | "orange" | "tie" => {
+      const p =
+        distanceMetric === "manhattan"
+          ? 1
+          : distanceMetric === "minkowski"
+          ? Math.max(1, Math.round(minkowskiP))
+          : 2; // euclidean -> p=2
 
-    type Cell = {
-      x: number;
-      y: number;
-      w: number;
-      h: number;
-      label: "blue" | "orange" | "tie";
-    };
-    const cells: Cell[] = [];
+      // kleine buffer met top-k (houd grootste afstand in de gaten)
+      const buf: { d: number; label: "blue" | "orange" }[] = [];
+      let maxI = -1;
 
-    const step = 2; // finer = smoother boundaries
-    const xStart = OFFSET_X;
-    const yStart = OFFSET_Y;
-    const xEnd = OFFSET_X + PLOT_WIDTH;
-    const yEnd = OFFSET_Y + PLOT_HEIGHT;
+      const pushMaybe = (d: number, label: "blue" | "orange") => {
+        if (buf.length < k) {
+          buf.push({ d, label });
+          // recompute max index
+          maxI = 0;
+          for (let i = 1; i < buf.length; i++)
+            if (buf[i].d > buf[maxI].d) maxI = i;
+        } else if (d < buf[maxI].d) {
+          buf[maxI] = { d, label };
+          // recompute max index
+          maxI = 0;
+          for (let i = 1; i < buf.length; i++)
+            if (buf[i].d > buf[maxI].d) maxI = i;
+        }
+      };
 
-    for (let px = xStart; px < xEnd; px += step) {
-      for (let py = yStart; py < yEnd; py += step) {
-        // sample at the pixel cell center
-        const dataX = X_MIN + (px - OFFSET_X + step / 2) / SCALE;
-        const dataY = Y_MIN + (py - OFFSET_Y + step / 2) / SCALE;
+      for (const pt of activePoints) {
+        const dx = Math.abs(x - pt.x);
+        const dy = Math.abs(y - pt.y);
+        let d: number;
+        if (p === 1) {
+          // Manhattan
+          d = dx + dy;
+        } else if (p === 2) {
+          // Euclidean (zonder sqrt)
+          d = dx * dx + dy * dy;
+        } else {
+          // Algemene Minkowski (zonder wortel, want ordening blijft gelijk)
+          d = Math.pow(dx, p) + Math.pow(dy, p);
+        }
+        pushMaybe(d, pt.label);
+      }
 
-        const neighbors = activePoints
-          .map((p, index) => ({
-            point: p,
-            index,
-            distance: calculateDistance({ x: dataX, y: dataY }, p),
-          }))
-          .sort((a, b) => a.distance - b.distance)
-          .slice(0, k);
+      let blue = 0,
+        orange = 0;
+      for (const it of buf) it.label === "blue" ? blue++ : orange++;
+      if (blue > orange) return "blue";
+      if (orange > blue) return "orange";
+      return "tie";
+    },
+    [activePoints, distanceMetric, minkowskiP, k]
+  );
 
-        const blueCount = neighbors.filter(
-          (n) => n.point.label === "blue"
-        ).length;
-        const orangeCount = neighbors.length - blueCount;
+  // --- Canvas Voronoi render ---
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-        let label: Cell["label"] = "tie";
-        if (blueCount > orangeCount) label = "blue";
-        else if (orangeCount > blueCount) label = "orange";
+    // toggle zichtbaarheid via CSS i.p.v. mount/unmount voor snelle toggles
+    canvas.style.display = showVoronoi ? "block" : "none";
+    if (!showVoronoi) return;
 
-        cells.push({ x: px, y: py, w: step, h: step, label });
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Voor scherpte op HiDPI schermen
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = PLOT_WIDTH * dpr;
+    canvas.height = PLOT_HEIGHT * dpr;
+    canvas.style.width = `${PLOT_WIDTH}px`;
+    canvas.style.height = `${PLOT_HEIGHT}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // schaal terug naar CSS pixels
+
+    ctx.clearRect(0, 0, PLOT_WIDTH, PLOT_HEIGHT);
+
+    const step = VORONOI_RESOLUTION;
+
+    for (let x = 0; x < PLOT_WIDTH; x += step) {
+      for (let y = 0; y < PLOT_HEIGHT; y += step) {
+        const dataX = X_MIN + (x + step / 2) / SCALE;
+        const dataY = Y_MIN + (y + step / 2) / SCALE;
+        const label = voteAt(dataX, dataY);
+        ctx.fillStyle =
+          label === "blue"
+            ? "#3b82f620"
+            : label === "orange"
+            ? "#f9731620"
+            : "#9ca3af20";
+        ctx.fillRect(x, y, step, step);
       }
     }
-    return cells;
-  }, [showVoronoi, k, calculateDistance, activePoints]);
+  }, [showVoronoi, PLOT_WIDTH, PLOT_HEIGHT, voteAt]);
 
   const nearestNeighbors = getNearestNeighbors();
 
@@ -258,7 +308,6 @@ export default function KNNDemo() {
                 <SelectItem value="dense">{DATASETS.dense.name}</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-500 mt-1"></p>
           </div>
 
           <div>
@@ -292,10 +341,9 @@ export default function KNNDemo() {
               <SelectContent>
                 <SelectItem value="euclidean">Euclidean</SelectItem>
                 <SelectItem value="manhattan">Manhattan</SelectItem>
+                {/* <SelectItem value="minkowski">Minkowski</SelectItem> */}
               </SelectContent>
             </Select>
-
-            {/* p control for Minkowski */}
 
             {distanceMetric === "minkowski" && (
               <div className="mt-2">
@@ -307,15 +355,15 @@ export default function KNNDemo() {
                     type="range"
                     min={1}
                     max={10}
-                    step={1} // <-- integer steps
+                    step={1}
                     value={minkowskiP}
                     onChange={(e) =>
                       setMinkowskiP(parseInt(e.target.value, 10))
-                    } // <-- force int
+                    }
                     className="w-full"
                   />
                   <span className="w-12 text-right text-sm tabular-nums">
-                    {minkowskiP} {/* <-- show as integer */}
+                    {minkowskiP}
                   </span>
                 </div>
               </div>
@@ -333,7 +381,6 @@ export default function KNNDemo() {
             >
               {showVoronoi ? "Hide" : "Show"} Voronoi Diagram
             </Button>
-            <p className="text-xs text-gray-500 mt-1"></p>
           </div>
 
           <div className="pt-4 border-t">
@@ -381,356 +428,345 @@ export default function KNNDemo() {
           </p>
         </CardHeader>
         <CardContent>
-          <svg
-            width={SVG_WIDTH}
-            height={SVG_HEIGHT}
-            className="border rounded-lg cursor-crosshair bg-white"
-            onClick={handleCanvasClick}
-          >
-            {/* Grid */}
-            <defs>
-              <pattern
-                id="grid"
-                x={OFFSET_X}
-                y={OFFSET_Y}
-                width={SCALE}
-                height={SCALE}
-                patternUnits="userSpaceOnUse"
-              >
-                <path
-                  d={`M ${SCALE} 0 L 0 0 0 ${SCALE}`}
-                  fill="none"
-                  stroke="#f0f0f0"
-                  strokeWidth="1"
-                  shapeRendering="crispEdges"
-                />
-              </pattern>
-
-              <clipPath id="plotClip">
-                <rect
-                  x={OFFSET_X}
-                  y={OFFSET_Y}
-                  width={PLOT_WIDTH}
-                  height={PLOT_HEIGHT}
-                />
-              </clipPath>
-            </defs>
-            <rect
-              x={OFFSET_X}
-              y={OFFSET_Y}
+          <div className="relative inline-block">
+            {/* Voronoi canvas overlay */}
+            <canvas
+              ref={canvasRef}
+              style={{
+                position: "absolute",
+                left: OFFSET_X,
+                top: OFFSET_Y,
+                pointerEvents: "none", // laat clicks door naar de SVG
+                display: showVoronoi ? "block" : "none",
+              }}
               width={PLOT_WIDTH}
               height={PLOT_HEIGHT}
-              fill="url(#grid)"
             />
 
-            {/* Voronoi (k-NN regions) */}
-            {showVoronoi &&
-              voronoiCells.map((cell, i) => (
-                <rect
-                  key={`voronoi-${i}`}
-                  x={cell.x}
-                  y={cell.y}
-                  width={cell.w}
-                  height={cell.h}
-                  fill={
-                    cell.label === "blue"
-                      ? "#3b82f620"
-                      : cell.label === "orange"
-                      ? "#f9731620"
-                      : "#9ca3af20"
+            {/* SVG plot */}
+            <svg
+              width={SVG_WIDTH}
+              height={SVG_HEIGHT}
+              className="border rounded-lg cursor-crosshair bg-white"
+              onClick={handleCanvasClick}
+            >
+              {/* Grid */}
+              <defs>
+                <pattern
+                  id="grid"
+                  x={OFFSET_X}
+                  y={OFFSET_Y}
+                  width={SCALE}
+                  height={SCALE}
+                  patternUnits="userSpaceOnUse"
+                >
+                  <path
+                    d={`M ${SCALE} 0 L 0 0 0 ${SCALE}`}
+                    fill="none"
+                    stroke="#f0f0f0"
+                    strokeWidth="1"
+                    shapeRendering="crispEdges"
+                  />
+                </pattern>
+
+                <clipPath id="plotClip">
+                  <rect
+                    x={OFFSET_X}
+                    y={OFFSET_Y}
+                    width={PLOT_WIDTH}
+                    height={PLOT_HEIGHT}
+                  />
+                </clipPath>
+              </defs>
+              <rect
+                x={OFFSET_X}
+                y={OFFSET_Y}
+                width={PLOT_WIDTH}
+                height={PLOT_HEIGHT}
+                fill="url(#grid)"
+              />
+
+              {/* Lines to nearest neighbors */}
+              {nearestNeighbors.map((neighbor) => (
+                <line
+                  key={`line-${neighbor.index}`}
+                  x1={queryPoint.x * SCALE + OFFSET_X}
+                  y1={queryPoint.y * SCALE + OFFSET_Y}
+                  x2={neighbor.point.x * SCALE + OFFSET_X}
+                  y2={neighbor.point.y * SCALE + OFFSET_Y}
+                  stroke={
+                    neighbor.point.label === "blue" ? "#3b82f6" : "#f97316"
                   }
-                  stroke="none"
-                  clipPath="url(#plotClip)"
+                  strokeWidth="3"
+                  strokeDasharray="8,4"
+                  opacity="0.8"
                 />
               ))}
 
-            {/* Lines to nearest neighbors */}
-            {nearestNeighbors.map((neighbor) => (
-              <line
-                key={`line-${neighbor.index}`}
-                x1={queryPoint.x * SCALE + OFFSET_X}
-                y1={queryPoint.y * SCALE + OFFSET_Y}
-                x2={neighbor.point.x * SCALE + OFFSET_X}
-                y2={neighbor.point.y * SCALE + OFFSET_Y}
-                stroke={neighbor.point.label === "blue" ? "#3b82f6" : "#f97316"}
-                strokeWidth="3"
-                strokeDasharray="8,4"
-                opacity="0.8"
-              />
-            ))}
+              {/* Training points */}
+              {activePoints.map((point, index) => {
+                const isNeighbor = nearestNeighbors.some(
+                  (n) => n.index === index
+                );
+                const neighborRank = nearestNeighbors.findIndex(
+                  (n) => n.index === index
+                );
 
-            {/* Training points */}
-            {activePoints.map((point, index) => {
-              const isNeighbor = nearestNeighbors.some(
-                (n) => n.index === index
-              );
-              const neighborRank = nearestNeighbors.findIndex(
-                (n) => n.index === index
-              );
+                return (
+                  <g key={index}>
+                    {point.label === "blue" ? (
+                      <rect
+                        x={point.x * SCALE + OFFSET_X - 8}
+                        y={point.y * SCALE + OFFSET_Y - 8}
+                        width="16"
+                        height="16"
+                        fill="#3b82f6"
+                        stroke={isNeighbor ? "#1d4ed8" : "none"}
+                        strokeWidth={isNeighbor ? "3" : "0"}
+                      />
+                    ) : (
+                      <circle
+                        cx={point.x * SCALE + OFFSET_X}
+                        cy={point.y * SCALE + OFFSET_Y}
+                        r="8"
+                        fill="#f97316"
+                        stroke={isNeighbor ? "#ea580c" : "none"}
+                        strokeWidth={isNeighbor ? "3" : "0"}
+                      />
+                    )}
 
-              return (
-                <g key={index}>
-                  {point.label === "blue" ? (
-                    <rect
-                      x={point.x * SCALE + OFFSET_X - 8}
-                      y={point.y * SCALE + OFFSET_Y - 8}
-                      width="16"
-                      height="16"
-                      fill="#3b82f6"
-                      stroke={isNeighbor ? "#1d4ed8" : "none"}
-                      strokeWidth={isNeighbor ? "3" : "0"}
-                    />
-                  ) : (
-                    <circle
-                      cx={point.x * SCALE + OFFSET_X}
-                      cy={point.y * SCALE + OFFSET_Y}
-                      r="8"
-                      fill="#f97316"
-                      stroke={isNeighbor ? "#ea580c" : "none"}
-                      strokeWidth={isNeighbor ? "3" : "0"}
-                    />
-                  )}
-
-                  {/* Coordinates */}
-                  <text
-                    x={point.x * SCALE + OFFSET_X}
-                    y={point.y * SCALE + OFFSET_Y - 15}
-                    textAnchor="middle"
-                    className="text-xs font-medium"
-                    fill="#374151"
-                  >
-                    ({point.x},{point.y})
-                  </text>
-
-                  {/* Neighbor rank */}
-                  {isNeighbor && (
+                    {/* Coordinates */}
                     <text
-                      x={point.x * SCALE + OFFSET_X + 12}
-                      y={point.y * SCALE + OFFSET_Y - 12}
-                      className="text-xs font-bold"
-                      fill="#dc2626"
+                      x={point.x * SCALE + OFFSET_X}
+                      y={point.y * SCALE + OFFSET_Y - 15}
+                      textAnchor="middle"
+                      className="text-xs font-medium"
+                      fill="#374151"
                     >
-                      #{neighborRank + 1}
+                      ({point.x},{point.y})
                     </text>
-                  )}
-                </g>
-              );
-            })}
 
-            {/* Query point (distinct, colored by prediction) */}
-            <g>
-              {/* outer dashed ring for distinct look */}
-              <circle
-                cx={queryPoint.x * SCALE + OFFSET_X}
-                cy={queryPoint.y * SCALE + OFFSET_Y}
-                r="18"
-                fill="none"
-                stroke={queryStyle.stroke}
-                strokeWidth="3"
-                strokeDasharray="6,4"
-                opacity="0.7"
-              />
-              {/* main filled circle */}
-              <circle
-                cx={queryPoint.x * SCALE + OFFSET_X}
-                cy={queryPoint.y * SCALE + OFFSET_Y}
-                r="13"
-                fill={queryStyle.fill}
-                stroke={queryStyle.stroke}
-                strokeWidth="2.5"
-              />
-              {/* question mark */}
+                    {/* Neighbor rank */}
+                    {isNeighbor && (
+                      <text
+                        x={point.x * SCALE + OFFSET_X + 12}
+                        y={point.y * SCALE + OFFSET_Y - 12}
+                        className="text-xs font-bold"
+                        fill="#dc2626"
+                      >
+                        #{neighborRank + 1}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* Query point */}
+              <g>
+                <circle
+                  cx={queryPoint.x * SCALE + OFFSET_X}
+                  cy={queryPoint.y * SCALE + OFFSET_Y}
+                  r="18"
+                  fill="none"
+                  stroke={queryStyle.stroke}
+                  strokeWidth="3"
+                  strokeDasharray="6,4"
+                  opacity="0.7"
+                />
+                <circle
+                  cx={queryPoint.x * SCALE + OFFSET_X}
+                  cy={queryPoint.y * SCALE + OFFSET_Y}
+                  r="13"
+                  fill={queryStyle.fill}
+                  stroke={queryStyle.stroke}
+                  strokeWidth="2.5"
+                />
+                <text
+                  x={queryPoint.x * SCALE + OFFSET_X}
+                  y={queryPoint.y * SCALE + OFFSET_Y + 5}
+                  textAnchor="middle"
+                  className="text-lg font-bold"
+                  fill={queryStyle.text}
+                >
+                  ?
+                </text>
+                <text
+                  x={queryPoint.x * SCALE + OFFSET_X}
+                  y={queryPoint.y * SCALE + OFFSET_Y - 22}
+                  textAnchor="middle"
+                  className="text-xs font-medium"
+                  fill="#374151"
+                >
+                  ({queryPoint.x},{queryPoint.y})
+                </text>
+              </g>
+
+              {/* Axis labels */}
               <text
-                x={queryPoint.x * SCALE + OFFSET_X}
-                y={queryPoint.y * SCALE + OFFSET_Y + 5}
-                textAnchor="middle"
-                className="text-lg font-bold"
-                fill={queryStyle.text}
-              >
-                ?
-              </text>
-              {/* coordinates */}
-              <text
-                x={queryPoint.x * SCALE + OFFSET_X}
-                y={queryPoint.y * SCALE + OFFSET_Y - 22}
-                textAnchor="middle"
-                className="text-xs font-medium"
+                x={OFFSET_X - 20}
+                y={OFFSET_Y + 15}
+                className="text-sm font-medium"
                 fill="#374151"
               >
-                ({queryPoint.x},{queryPoint.y})
+                Y
               </text>
-            </g>
-
-            {/* Axis labels */}
-            <text
-              x={OFFSET_X - 20}
-              y={OFFSET_Y + 15}
-              className="text-sm font-medium"
-              fill="#374151"
-            >
-              Y
-            </text>
-            <text
-              x={OFFSET_X + PLOT_WIDTH - 10}
-              y={OFFSET_Y + PLOT_HEIGHT - 10}
-              className="text-sm font-medium"
-              fill="#374151"
-            >
-              X
-            </text>
-          </svg>
+              <text
+                x={OFFSET_X + PLOT_WIDTH - 10}
+                y={OFFSET_Y + PLOT_HEIGHT - 10}
+                className="text-sm font-medium"
+                fill="#374151"
+              >
+                X
+              </text>
+            </svg>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Calculations (collapsible) */}
+      {/* Calculations (details/summary) */}
       <Card className="lg:col-span-3">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Distance Calculations</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowCalculations((v) => !v)}
-          >
-            {showCalculations
-              ? "Hide Distance Calculations"
-              : "Show Distance Calculations"}
-          </Button>
-        </CardHeader>
+        <CardContent>
+          <details>
+            <summary className="cursor-pointer select-none py-1 text-base font-medium">
+              Distance Calculations
+            </summary>
+            <div className="mt-3">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2">Point</th>
+                      <th className="text-left p-2">Coordinates</th>
+                      <th className="text-left p-2">Class</th>
+                      <th className="text-left p-2">Distance Calculation</th>
+                      <th className="text-left p-2">Distance</th>
+                      <th className="text-left p-2">Rank</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activePoints.map((point, index) => {
+                      const distance = calculateDistance(queryPoint, point);
+                      const neighborIndex = nearestNeighbors.findIndex(
+                        (n) => n.index === index
+                      );
+                      const isNeighbor = neighborIndex !== -1;
 
-        {showCalculations && (
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-2">Point</th>
-                    <th className="text-left p-2">Coordinates</th>
-                    <th className="text-left p-2">Class</th>
-                    <th className="text-left p-2">Distance Calculation</th>
-                    <th className="text-left p-2">Distance</th>
-                    <th className="text-left p-2">Rank</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activePoints.map((point, index) => {
-                    const distance = calculateDistance(queryPoint, point);
-                    const neighborIndex = nearestNeighbors.findIndex(
-                      (n) => n.index === index
-                    );
-                    const isNeighbor = neighborIndex !== -1;
+                      let calculation = "";
+                      const dx = Math.abs(queryPoint.x - point.x);
+                      const dy = Math.abs(queryPoint.y - point.y);
 
-                    let calculation = "";
-                    const dx = Math.abs(queryPoint.x - point.x);
-                    const dy = Math.abs(queryPoint.y - point.y);
+                      switch (distanceMetric) {
+                        case "euclidean":
+                          calculation = `√((${queryPoint.x}-${point.x})² + (${
+                            queryPoint.y
+                          }-${point.y})²) = √(${dx}² + ${dy}²) = √${
+                            dx * dx + dy * dy
+                          }`;
+                          break;
+                        case "manhattan":
+                          calculation = `|${queryPoint.x}-${point.x}| + |${queryPoint.y}-${point.y}| = ${dx} + ${dy}`;
+                          break;
+                        case "minkowski":
+                          calculation =
+                            `(|Δx|^p + |Δy|^p)^(1/p) with p=${minkowskiP} → ` +
+                            `(${dx}^${minkowskiP} + ${dy}^${minkowskiP})^(1/${minkowskiP})`;
+                          break;
+                      }
 
-                    switch (distanceMetric) {
-                      case "euclidean":
-                        calculation = `√((${queryPoint.x}-${point.x})² + (${
-                          queryPoint.y
-                        }-${point.y})²) = √(${dx}² + ${dy}²) = √${
-                          dx * dx + dy * dy
-                        }`;
-                        break;
-                      case "manhattan":
-                        calculation = `|${queryPoint.x}-${point.x}| + |${queryPoint.y}-${point.y}| = ${dx} + ${dy}`;
-                        break;
-                      case "minkowski":
-                        calculation =
-                          `(|Δx|^p + |Δy|^p)^(1/p) with p=${minkowskiP} → ` +
-                          `(${dx}^${minkowskiP} + ${dy}^${minkowskiP})^(1/${minkowskiP})`;
-                        break;
-                    }
-
-                    return (
-                      <tr
-                        key={index}
-                        className={`border-b ${
-                          isNeighbor ? "bg-yellow-50 font-medium" : ""
-                        }`}
-                      >
-                        <td className="p-2">
-                          <div className="flex items-center gap-2">
-                            {point.label === "blue" ? (
-                              <div className="w-4 h-4 bg-blue-500" />
-                            ) : (
-                              <div className="w-4 h-4 bg-orange-500 rounded-full" />
-                            )}
-                            Point {index + 1}
-                          </div>
-                        </td>
-                        <td className="p-2">
-                          ({point.x}, {point.y})
-                        </td>
-                        <td className="p-2">
-                          <Badge
-                            variant={
-                              point.label === "blue" ? "default" : "secondary"
-                            }
-                          >
-                            {point.label}
-                          </Badge>
-                        </td>
-                        <td className="p-2 font-mono text-xs">{calculation}</td>
-                        <td className="p-2 font-mono">{distance.toFixed(2)}</td>
-                        <td className="p-2">
-                          {isNeighbor ? (
-                            <Badge variant="destructive">
-                              #{neighborIndex + 1}
+                      return (
+                        <tr
+                          key={index}
+                          className={`border-b ${
+                            isNeighbor ? "bg-yellow-50 font-medium" : ""
+                          }`}
+                        >
+                          <td className="p-2">
+                            <div className="flex items-center gap-2">
+                              {point.label === "blue" ? (
+                                <div className="w-4 h-4 bg-blue-500" />
+                              ) : (
+                                <div className="w-4 h-4 bg-orange-500 rounded-full" />
+                              )}
+                              Point {index + 1}
+                            </div>
+                          </td>
+                          <td className="p-2">
+                            ({point.x}, {point.y})
+                          </td>
+                          <td className="p-2">
+                            <Badge
+                              variant={
+                                point.label === "blue" ? "default" : "secondary"
+                              }
+                            >
+                              {point.label}
                             </Badge>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          </td>
+                          <td className="p-2 font-mono text-xs">
+                            {calculation}
+                          </td>
+                          <td className="p-2 font-mono">
+                            {distance.toFixed(2)}
+                          </td>
+                          <td className="p-2">
+                            {isNeighbor ? (
+                              <Badge variant="destructive">
+                                #{neighborIndex + 1}
+                              </Badge>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-              <h4 className="font-medium mb-2">Classification Result</h4>
-
-              <div className="flex gap-4 mt-2">
-                <span>
-                  Blue votes:{" "}
-                  {
-                    nearestNeighbors.filter((n) => n.point.label === "blue")
-                      .length
-                  }
-                </span>
-                <span>
-                  Orange votes:{" "}
-                  {
-                    nearestNeighbors.filter((n) => n.point.label === "orange")
-                      .length
-                  }
-                </span>
-                <span className="font-medium">
-                  → Prediction:{" "}
-                  <Badge
-                    variant={
-                      prediction === "blue"
-                        ? "default"
-                        : prediction === "orange"
-                        ? "secondary"
-                        : "outline"
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium mb-2">Classification Result</h4>
+                <div className="flex gap-4 mt-2">
+                  <span>
+                    Blue votes:{" "}
+                    {
+                      nearestNeighbors.filter((n) => n.point.label === "blue")
+                        .length
                     }
-                    className={`text-white ${
-                      prediction === "blue"
-                        ? "bg-blue-500"
-                        : prediction === "orange"
-                        ? "bg-orange-500"
-                        : "bg-gray-500"
-                    }`}
-                  >
-                    {prediction === "tie" ? "Tie" : prediction}
-                  </Badge>
-                </span>
+                  </span>
+                  <span>
+                    Orange votes:{" "}
+                    {
+                      nearestNeighbors.filter((n) => n.point.label === "orange")
+                        .length
+                    }
+                  </span>
+                  <span className="font-medium">
+                    → Prediction:{" "}
+                    <Badge
+                      variant={
+                        prediction === "blue"
+                          ? "default"
+                          : prediction === "orange"
+                          ? "secondary"
+                          : "outline"
+                      }
+                      className={`text-white ${
+                        prediction === "blue"
+                          ? "bg-blue-500"
+                          : prediction === "orange"
+                          ? "bg-orange-500"
+                          : "bg-gray-500"
+                      }`}
+                    >
+                      {prediction === "tie" ? "Tie" : prediction}
+                    </Badge>
+                  </span>
+                </div>
               </div>
             </div>
-          </CardContent>
-        )}
+          </details>
+        </CardContent>
       </Card>
     </div>
   );
