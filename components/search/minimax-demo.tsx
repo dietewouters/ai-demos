@@ -958,8 +958,9 @@ export default function MinimaxDemo() {
     walk(world);
     return p;
   }, [world]);
-  const cutStepsUpTo = useMemo(() => {
-    return steps.slice(0, currentStep + 1).filter((s) => s.action === "cut");
+  const cutStepsActive = useMemo(() => {
+    const s = steps[currentStep];
+    return s && s.action === "cut" ? [s] : [];
   }, [steps, currentStep]);
 
   // ===== Algorithm steps (no explanation strings) =====
@@ -1091,21 +1092,31 @@ export default function MinimaxDemo() {
           };
         }
 
-        // 3) Evaluate/Backtrack ⇒ lokale tijdelijke waarde updaten
         if (
           (step.action === "evaluate" || step.action === "backtrack") &&
           n.id === step.nodeId
         ) {
           const isMax = n.isMax === true;
+          const singleChild = (n.children?.length ?? 0) === 1;
 
           if (isMax) {
-            const prev = n.beta ?? -Infinity; // β op MAX stijgt
-            const next = step.value ?? prev;
+            const prev = n.beta; // vorige best voor MAX
+            const isFirst = prev === undefined;
+            const next = step.value ?? prev ?? -Infinity;
+
+            const op = singleChild
+              ? "="
+              : isFirst
+              ? "≥"
+              : next > (prev as number)
+              ? "≥"
+              : "=";
+
             return {
               ...n,
               beta: next,
               alpha: undefined,
-              lastOp: next > prev ? "≥" : "=",
+              lastOp: op,
               lastUpdated: true,
               finalValue: step.value ?? n.finalValue,
               visited: true,
@@ -1113,13 +1124,23 @@ export default function MinimaxDemo() {
               children: n.children?.map(apply),
             };
           } else {
-            const prev = n.alpha ?? Infinity; // α op MIN daalt
-            const next = step.value ?? prev;
+            const prev = n.alpha; // vorige best voor MIN
+            const isFirst = prev === undefined;
+            const next = step.value ?? prev ?? Infinity;
+
+            const op = singleChild
+              ? "="
+              : isFirst
+              ? "≤"
+              : next < (prev as number)
+              ? "≤"
+              : "=";
+
             return {
               ...n,
               alpha: next,
               beta: undefined,
-              lastOp: next < prev ? "≤" : "=",
+              lastOp: op,
               lastUpdated: true,
               finalValue: step.value ?? n.finalValue,
               visited: true,
@@ -1785,12 +1806,10 @@ export default function MinimaxDemo() {
 
                       {(() => {
                         const idx = nodeIndex(visualTree);
-                        return cutStepsUpTo.map((s, i) => {
+                        return cutStepsActive.map((s, i) => {
                           const cutNode = idx.get(s.nodeId); // knoop waar b ≤ a werd gedetecteerd
                           if (!cutNode) return null;
 
-                          // Bij cut op MIN: pijl van β-VOOROUDER (MAX) → α (cutNode)
-                          // Bij cut op MAX: pijl van α-VOOROUDER (MIN) → β (cutNode)
                           const ancestor = cutNode.isMax
                             ? findNearestFilledAncestorOfType(
                                 cutNode.id,
@@ -1821,7 +1840,9 @@ export default function MinimaxDemo() {
                           const label = ancestor.isMax ? "β≥α" : "α≤β";
                           const mx = (x1 + x2) / 2,
                             my = (y1 + y2) / 2;
-
+                          const fs = 16; // lettergrootte
+                          const boxW = fs * 2.6; // breedte labelbox (≈ voor "β≥α")
+                          const boxH = fs * 1.4;
                           return (
                             <g key={i} opacity={0.95}>
                               <line
@@ -1834,21 +1855,23 @@ export default function MinimaxDemo() {
                                 strokeDasharray="6 4"
                                 markerEnd="url(#arrow-red)"
                               />
+
                               <rect
-                                x={mx - 14}
-                                y={my - 10}
+                                x={mx - boxW / 2}
+                                y={my - boxH / 2}
                                 rx={4}
                                 ry={4}
-                                width={28}
-                                height={16}
+                                width={boxW}
+                                height={boxH}
                                 fill="white"
                                 stroke="#ef4444"
                               />
+
                               <text
                                 x={mx}
-                                y={my + 2}
+                                y={my + fs * 0.35} // optische centrering
                                 textAnchor="middle"
-                                fontSize="10"
+                                fontSize={fs}
                                 fill="#b91c1c"
                                 fontWeight={700}
                               >
