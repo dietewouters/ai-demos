@@ -1,8 +1,49 @@
 "use client";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+
+/** ───────────────── Collapsible ───────────────── */
+function CollapsibleSection({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: ReactNode;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details
+      className="w-full rounded-xl border bg-white shadow-sm"
+      {...(defaultOpen ? { open: true } : {})}
+    >
+      <summary className="cursor-pointer select-none px-4 py-3 text-[15px] font-semibold leading-none">
+        {title}
+      </summary>
+      <div className="p-4 pt-0">{children}</div>
+    </details>
+  );
+}
+
+/** ───────────────── Helpers ───────────────── */
+const EPS = 1e-9;
+const changed = (a?: number, b?: number) =>
+  typeof a === "number" && typeof b === "number"
+    ? Math.abs(a - b) > EPS
+    : false;
+
+function useFlashTick(tick: number, ms = 1900) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (tick === 0) return; // 0 = nog nooit gepulst
+    setOn(true);
+    const id = setTimeout(() => setOn(false), ms);
+    return () => clearTimeout(id);
+  }, [tick, ms]);
+  return on;
+}
 
 interface BayesianParams {
   theta_f: number;
@@ -189,146 +230,151 @@ function contributesForParam(
   }
 }
 
+/** ───────────────── DataTable (met change flash) ───────────────── */
 function DataTable({
   data,
   expectations,
+  prevExpectations,
+  flashE,
+  flashEpoch = 0,
   currentStep,
-  onRowClick,
-  selectedRow,
-  selectedParameter,
+  selectedParameter, // blijft
 }: {
   data: DataPoint[];
   expectations: number[][];
+  prevExpectations: number[][];
+  flashE: boolean;
+  flashEpoch?: number;
   currentStep: string;
-  onRowClick: (index: number) => void;
-  selectedRow: number | null;
   selectedParameter: string | null;
 }) {
   const isInitial = currentStep === "ready";
-  const expandedData: ExpandedDataPoint[] = [];
-  data.forEach((point, rowIndex) => {
-    const missingF = point.f === undefined;
-    const missingT1 = point.t1 === undefined;
-    const missingT2 = point.t2 === undefined;
-    const exp = expectations[rowIndex];
-    if (!missingF && !missingT1 && !missingT2) {
-      expandedData.push({
-        f: point.f!,
-        t1: point.t1!,
-        t2: point.t2!,
-        weight: 1,
-        source_row: rowIndex + 1,
-      });
-    } else if (!isInitial) {
-      if (!missingF && !missingT1 && missingT2 && exp && exp.length >= 2) {
-        expandedData.push({
+
+  // helper om expanded rows te bouwen uit expectations
+  const buildExpanded = (points: DataPoint[], exps: number[][]) => {
+    const out: ExpandedDataPoint[] = [];
+    points.forEach((point, rowIndex) => {
+      const missingF = point.f === undefined;
+      const missingT1 = point.t1 === undefined;
+      const missingT2 = point.t2 === undefined;
+      const exp = exps[rowIndex];
+      if (!missingF && !missingT1 && !missingT2) {
+        out.push({
           f: point.f!,
           t1: point.t1!,
-          t2: 1,
-          weight: exp[0],
-          source_row: rowIndex + 1,
-          missing_t2: true,
-        });
-        expandedData.push({
-          f: point.f!,
-          t1: point.t1!,
-          t2: 0,
-          weight: exp[1],
-          source_row: rowIndex + 1,
-          missing_t2: true,
-        });
-      } else if (
-        !missingF &&
-        missingT1 &&
-        !missingT2 &&
-        exp &&
-        exp.length >= 2
-      ) {
-        expandedData.push({
-          f: point.f!,
-          t1: 1,
           t2: point.t2!,
-          weight: exp[0],
+          weight: 1,
           source_row: rowIndex + 1,
-          missing_t1: true,
         });
-        expandedData.push({
-          f: point.f!,
-          t1: 0,
-          t2: point.t2!,
-          weight: exp[1],
-          source_row: rowIndex + 1,
-          missing_t1: true,
-        });
-      } else if (
-        missingF &&
-        !missingT1 &&
-        !missingT2 &&
-        exp &&
-        exp.length >= 2
-      ) {
-        expandedData.push({
-          f: 1,
-          t1: point.t1!,
-          t2: point.t2!,
-          weight: exp[0],
-          source_row: rowIndex + 1,
-          missing_f: true,
-        });
-        expandedData.push({
-          f: 0,
-          t1: point.t1!,
-          t2: point.t2!,
-          weight: exp[1],
-          source_row: rowIndex + 1,
-          missing_f: true,
-        });
-      } else if (
-        missingF &&
-        missingT1 &&
-        !missingT2 &&
-        exp &&
-        exp.length >= 4
-      ) {
-        expandedData.push({
-          f: 1,
-          t1: 1,
-          t2: point.t2!,
-          weight: exp[0],
-          source_row: rowIndex + 1,
-          missing_f: true,
-          missing_t1: true,
-        });
-        expandedData.push({
-          f: 1,
-          t1: 0,
-          t2: point.t2!,
-          weight: exp[1],
-          source_row: rowIndex + 1,
-          missing_f: true,
-          missing_t1: true,
-        });
-        expandedData.push({
-          f: 0,
-          t1: 1,
-          t2: point.t2!,
-          weight: exp[2],
-          source_row: rowIndex + 1,
-          missing_f: true,
-          missing_t1: true,
-        });
-        expandedData.push({
-          f: 0,
-          t1: 0,
-          t2: point.t2!,
-          weight: exp[3],
-          source_row: rowIndex + 1,
-          missing_f: true,
-          missing_t1: true,
-        });
+      } else if (exp && exp.length) {
+        if (!missingF && !missingT1 && missingT2 && exp.length >= 2) {
+          out.push({
+            f: point.f!,
+            t1: point.t1!,
+            t2: 1,
+            weight: exp[0],
+            source_row: rowIndex + 1,
+            missing_t2: true,
+          });
+          out.push({
+            f: point.f!,
+            t1: point.t1!,
+            t2: 0,
+            weight: exp[1],
+            source_row: rowIndex + 1,
+            missing_t2: true,
+          });
+        } else if (!missingF && missingT1 && !missingT2 && exp.length >= 2) {
+          out.push({
+            f: point.f!,
+            t1: 1,
+            t2: point.t2!,
+            weight: exp[0],
+            source_row: rowIndex + 1,
+            missing_t1: true,
+          });
+          out.push({
+            f: point.f!,
+            t1: 0,
+            t2: point.t2!,
+            weight: exp[1],
+            source_row: rowIndex + 1,
+            missing_t1: true,
+          });
+        } else if (missingF && !missingT1 && !missingT2 && exp.length >= 2) {
+          out.push({
+            f: 1,
+            t1: point.t1!,
+            t2: point.t2!,
+            weight: exp[0],
+            source_row: rowIndex + 1,
+            missing_f: true,
+          });
+          out.push({
+            f: 0,
+            t1: point.t1!,
+            t2: point.t2!,
+            weight: exp[1],
+            source_row: rowIndex + 1,
+            missing_f: true,
+          });
+        } else if (missingF && missingT1 && !missingT2 && exp.length >= 4) {
+          out.push({
+            f: 1,
+            t1: 1,
+            t2: point.t2!,
+            weight: exp[0],
+            source_row: rowIndex + 1,
+            missing_f: true,
+            missing_t1: true,
+          });
+          out.push({
+            f: 1,
+            t1: 0,
+            t2: point.t2!,
+            weight: exp[1],
+            source_row: rowIndex + 1,
+            missing_f: true,
+            missing_t1: true,
+          });
+          out.push({
+            f: 0,
+            t1: 1,
+            t2: point.t2!,
+            weight: exp[2],
+            source_row: rowIndex + 1,
+            missing_f: true,
+            missing_t1: true,
+          });
+          out.push({
+            f: 0,
+            t1: 0,
+            t2: point.t2!,
+            weight: exp[3],
+            source_row: rowIndex + 1,
+            missing_f: true,
+            missing_t1: true,
+          });
+        }
       }
-    }
-  });
+    });
+    return out;
+  };
+
+  const expandedData = buildExpanded(data, expectations);
+  const prevExpandedData = buildExpanded(data, prevExpectations || []);
+
+  const findPrevWeight = (r: ExpandedDataPoint) => {
+    const hit = prevExpandedData.find(
+      (x) =>
+        x.source_row === r.source_row &&
+        x.f === r.f &&
+        x.t1 === r.t1 &&
+        x.t2 === r.t2
+    );
+    return hit?.weight;
+  };
+
   const initialRows: ExpandedDataPoint[] = data.map((p, idx) => ({
     f: p.f ?? 0,
     t1: p.t1 ?? 0,
@@ -341,114 +387,121 @@ function DataTable({
   }));
   const rowsToRender = isInitial ? initialRows : expandedData;
 
-  const isGroupStart = (i: number) =>
-    i === 0 || rowsToRender[i - 1].source_row !== rowsToRender[i].source_row;
-  const isGroupEnd = (i: number) =>
-    i === rowsToRender.length - 1 ||
-    rowsToRender[i + 1].source_row !== rowsToRender[i].source_row;
-
   const cellHighlight = (
     row: ExpandedDataPoint,
     col: "f" | "t1" | "t2" | "weight" | "source"
   ): string => {
     if (!selectedParameter || currentStep !== "m-completed") return "";
-    const c = contributesForParam(selectedParameter, row);
-    const numCls = "outline outline-2 outline-sky-600";
-    const denCls = "bg-green-100";
-    if (selectedParameter === "theta_f") {
-      if (col === "f") {
-        // Denominator = alle rijen (fill), Numerator = f=1 (outline bovenop)
-        if (c.num && c.den) return `${denCls} ${numCls}`;
-        if (c.den) return denCls;
-      }
-    }
+
+    const { num, den } = contributesForParam(selectedParameter, row);
+    const cls: string[] = [];
+
+    // Noemer: highlight context op f
+    if (den && col === "f") cls.push("bg-green-100");
+
     switch (selectedParameter) {
+      case "theta_f":
+        // Teller enkel in f → één gesloten kader
+        if (num && col === "f") cls.push("em-num-single");
+        break;
+
       case "theta_t1_f1":
       case "theta_t1_f0":
-        if (col === "f" && c.den) return denCls;
-        if (col === "t1" && c.num) return numCls;
-        if (col === "f" && c.num) return numCls;
+        // Teller over f+t1 → doorlopende horizontale kader
+        if (num && col === "f") cls.push("em-num-left");
+        if (num && col === "t1") cls.push("em-num-right");
         break;
+
       case "theta_t2_f1":
       case "theta_t2_f0":
-        if (col === "f" && c.den) return denCls;
-        if (col === "t2" && c.num) return numCls;
-        if (col === "f" && c.num) return numCls;
+        // Teller over f én t2 → twee aparte gesloten kaders
+        if (num && (col === "f" || col === "t2")) cls.push("em-num-single");
         break;
     }
-    if (col === "weight" && (c.num || c.den)) return "font-bold";
-    return "";
+
+    if (col === "weight" && (num || den)) cls.push("font-bold");
+    return cls.join(" ");
   };
+
   const show = (v?: number) => (v === undefined ? "?" : String(v));
 
-  const edgeColor = "border-neutral-700"; // iets subtieler
-
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse">
+    <div className="rounded-md border-[1.5px] border-neutral-700 overflow-hidden">
+      <table className="w-full border-separate border-spacing-0">
         <thead>
           <tr className="bg-gray-100">
-            <th className="border border-gray-300 px-3 py-2">Source Row</th>
-            <th className="border border-gray-300 px-3 py-2">f</th>
-            <th className="border border-gray-300 px-3 py-2">t₁</th>
-            <th className="border border-gray-300 px-3 py-2">t₂</th>
-            <th className="border border-gray-300 px-3 py-2">weight</th>
+            <th className="border-[0.5px] border-gray-300 px-3 py-2">
+              Source Row
+            </th>
+            <th className="border-[0.5px] border-gray-300 px-3 py-2">f</th>
+            <th className="border-[0.5px] border-gray-300 px-3 py-2">t₁</th>
+            <th className="border-[0.5px] border-gray-300 px-3 py-2">t₂</th>
+            <th className="border-[0.5px] border-gray-300 px-3 py-2">weight</th>
           </tr>
         </thead>
         <tbody>
           {rowsToRender.map((row, idx) => {
             const originalRowIndex = row.source_row - 1;
 
-            // bepaal group-begins/ends (per aaneengesloten blok met zelfde source_row)
             const isStart =
               idx === 0 || rowsToRender[idx - 1].source_row !== row.source_row;
             const isEnd =
               idx === rowsToRender.length - 1 ||
               rowsToRender[idx + 1].source_row !== row.source_row;
 
-            // rand-klassen: enkel rondom de groep, dunste binnenin
-            const edgeColor = "border-neutral-700"; // subtiele donkergrijs
             const topCls =
-              !isInitial && isStart ? "border-t-2 border-t-neutral-700" : "";
-            const bottomCls =
-              !isInitial && isEnd ? "border-b-2 border-b-neutral-700" : "";
+              !isInitial && isStart
+                ? "border-t-[1.5px] border-t-neutral-700"
+                : "";
 
-            // alleen op 1e en laatste kolom-cel
+            const bottomCls =
+              !isInitial && isEnd
+                ? "border-b-[1.5px] border-b-neutral-700"
+                : "";
+
+            // verticale randen langs de groep (alle rijen van de groep krijgen deze)
             const leftEdgeCls = !isInitial
-              ? "border-l-2 border-l-neutral-700"
+              ? "border-l-[1.5px] border-l-neutral-700"
               : "";
             const rightEdgeCls = !isInitial
-              ? "border-r-2 border-r-neutral-700"
+              ? "border-r-[1.5px] border-r-neutral-700"
               : "";
 
-            // basiscel
-            const tdBase = `border border-gray-300 px-3 py-2 text-center font-mono`;
+            const tdBase = `border-[1px] border-gray-300 px-3 py-2 text-center font-mono text-[18px]`;
+
+            // change detection for weight (only after E-step)
+            const prevW = !isInitial ? findPrevWeight(row) : undefined;
+            const isFirstEStep =
+              (prevExpectations?.length ?? 0) === 0 && expectations.length > 0;
+
+            const weightChanged =
+              !isInitial &&
+              (isFirstEStep || // eerste E-step: alles wat nu gewogen is, laten pulsen
+                (typeof prevW === "number" &&
+                  Math.abs(row.weight - prevW) > EPS));
 
             return (
-              <tr
-                key={idx}
-                className={`cursor-pointer hover:bg-gray-50 ${
-                  selectedRow === originalRowIndex ? "bg-yellow-200" : ""
-                }`}
-              >
+              <tr key={idx} className="hover:bg-gray-50">
                 <td
-                  className={`border border-gray-300 px-3 py-2 text-center font-semibold
-    ${cellHighlight(row, "source")}  /* eerst highlight */
-    ${leftEdgeCls} ${topCls} ${bottomCls}             /* dan de randen */
-  `}
+                  className={`border border-gray-300 px-3 py-2 text-center font-semibold text-[16px]
+                    ${cellHighlight(row, "source")}
+                    ${leftEdgeCls} ${topCls} ${bottomCls}`}
                 >
                   {row.source_row}
                 </td>
+
                 <td
-                  className={`${tdBase} ${row.missing_f ? "font-bold" : ""}
-  ${cellHighlight(row, "f")}  ${topCls} ${bottomCls}`}
+                  className={`${tdBase} ${
+                    row.missing_f ? "font-bold" : ""
+                  } ${cellHighlight(row, "f")}  ${topCls} ${bottomCls}`}
                 >
                   {isInitial ? show(row.missing_f ? undefined : row.f) : row.f}
                 </td>
 
                 <td
-                  className={`${tdBase} ${row.missing_t1 ? "font-bold" : ""}
-  ${cellHighlight(row, "t1")} ${topCls} ${bottomCls}`}
+                  className={`${tdBase} ${
+                    row.missing_t1 ? "font-bold" : ""
+                  } ${cellHighlight(row, "t1")} ${topCls} ${bottomCls}`}
                 >
                   {isInitial
                     ? show(row.missing_t1 ? undefined : row.t1)
@@ -456,8 +509,9 @@ function DataTable({
                 </td>
 
                 <td
-                  className={`${tdBase} ${row.missing_t2 ? "font-bold" : ""}
-  ${cellHighlight(row, "t2")} ${topCls} ${bottomCls}`}
+                  className={`${tdBase} ${
+                    row.missing_t2 ? "font-bold" : ""
+                  } ${cellHighlight(row, "t2")} ${topCls} ${bottomCls}`}
                 >
                   {isInitial
                     ? show(row.missing_t2 ? undefined : row.t2)
@@ -465,17 +519,27 @@ function DataTable({
                 </td>
 
                 <td
-                  className={`${tdBase}
-  ${cellHighlight(row, "weight")} ${topCls} ${bottomCls} ${rightEdgeCls}`}
+                  className={`${tdBase} ${cellHighlight(
+                    row,
+                    "weight"
+                  )} ${topCls} ${bottomCls} ${rightEdgeCls}`}
                 >
                   <div className="space-y-1">
-                    <div className="font-mono text-xs">
+                    <div
+                      key={`${row.source_row}-${row.f}-${row.t1}-${row.t2}-${
+                        flashE && weightChanged ? flashEpoch : "static"
+                      }`}
+                      className={`font-mono text-[18px] transition-all ${
+                        flashE && weightChanged ? "em-flash-weight" : ""
+                      }`}
+                    >
                       {isInitial
                         ? row.missing_f || row.missing_t1 || row.missing_t2
                           ? "—"
                           : "1"
                         : row.weight.toFixed(3)}
                     </div>
+
                     {!isInitial && (
                       <div className="text-xs text-gray-700">
                         {(() => {
@@ -527,6 +591,16 @@ function DataTable({
   );
 }
 
+/** ───────────────── Q panel (ongewijzigde inhoud) ───────────────── */
+function QPlain({ i }: { i: number }) {
+  return (
+    <>
+      <span className="font-serif italic">q</span>
+      <sup>{i}</sup>
+    </>
+  );
+}
+
 function QFunctionsPanel({
   data,
   params,
@@ -539,44 +613,94 @@ function QFunctionsPanel({
   currentStep: string;
 }) {
   const isAfterE = currentStep !== "ready";
-  const fmt = (x: number, d = 6) =>
-    Number.isFinite(x) ? x.toFixed(d) : String(x);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Kleine helper die eruitziet zoals de M-step Box
   const EBox = ({
+    id,
     title,
     num,
     den,
     rhs,
     value,
+    steps,
   }: {
-    title: ReactNode; // linkerkant, bv. q^i(t₂=1 | …)
-    num?: ReactNode; // teller (optioneel)
-    den?: ReactNode; // noemer (optioneel)
-    rhs?: ReactNode; // of direct een rechterlid (ipv breuk)
-    value?: number; // numerieke uitkomst (optioneel)
-  }) => (
-    <div className="border-2 p-4 rounded bg-white">
-      <div className="font-mono text-lg mb-2">
-        {title} ={" "}
-        {num && den ? (
-          <Frac num={num} den={den} className="align-middle" />
-        ) : (
-          rhs
+    id: string;
+    title: ReactNode;
+    num?: ReactNode;
+    den?: ReactNode;
+    rhs?: ReactNode;
+    value?: number;
+    steps?: ReactNode[];
+  }) => {
+    const open = expanded === id;
+    // binnen EBox in QFunctionsPanel
+    const hasExpr = (!!num && !!den) || rhs !== undefined;
+
+    return (
+      <div
+        className={`border-2 p-4 rounded bg-white cursor-pointer transition-all ${
+          open
+            ? "border-sky-400 bg-sky-50 shadow"
+            : "border-gray-200 hover:border-gray-300"
+        }`}
+        onClick={() => setExpanded(open ? null : id)}
+      >
+        {/* alles op één regel */}
+        <div className="font-mono text-lg flex flex-wrap items-center gap-2">
+          {title}
+          {num && den ? (
+            <>
+              <span>=</span>
+              <Frac num={num} den={den} className="align-middle" />
+              {typeof value === "number" && (
+                <>
+                  <span>=</span>
+                  <span className="font-bold">{value.toFixed(3)}</span>
+                </>
+              )}
+            </>
+          ) : rhs ? (
+            <>
+              <span>=</span>
+              <span className="inline-flex items-center">{rhs}</span>
+              {typeof value === "number" && (
+                <>
+                  <span>=</span>
+                  <span className="font-bold">{value.toFixed(3)}</span>
+                </>
+              )}
+            </>
+          ) : (
+            // geen expressie (bv. complete rij) → één "=" met de waarde
+            typeof value === "number" && (
+              <>
+                <span>=</span>
+                <span className="font-bold">{value.toFixed(3)}</span>
+              </>
+            )
+          )}
+        </div>
+
+        {open && steps && steps.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {steps.map((block, k) => (
+              <div key={k} className="border rounded bg-white p-2 text-sm">
+                {block}
+              </div>
+            ))}
+          </div>
         )}
       </div>
-      {typeof value === "number" && (
-        <div className="mt-1 text-lg font-bold">= {value.toFixed(6)}</div>
-      )}
-    </div>
+    );
+  };
+
+  // helpers voor stap-teksten
+  const StepLabel = ({ children }: { children: ReactNode }) => (
+    <div className="text-xs text-gray-500 mb-1">{children}</div>
   );
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Q-functions (E-step)</CardTitle>
-      </CardHeader>
-
       <CardContent className="space-y-6">
         {data.map((p, i) => {
           const idx = i + 1;
@@ -586,46 +710,45 @@ function QFunctionsPanel({
           const missingT1 = p.t1 === undefined;
           const missingT2 = p.t2 === undefined;
 
-          // handige symbolische stukjes
           const T1_f1 =
             p.t1 === 1 ? (
-              <span>
+              <>
                 θ<sub>t11</sub>
-              </span>
+              </>
             ) : (
-              <span>
+              <>
                 (1−θ<sub>t11</sub>)
-              </span>
+              </>
             );
           const T1_f0 =
             p.t1 === 1 ? (
-              <span>
+              <>
                 θ<sub>t10</sub>
-              </span>
+              </>
             ) : (
-              <span>
+              <>
                 (1−θ<sub>t10</sub>)
-              </span>
+              </>
             );
           const T2_f1 =
             p.t2 === 1 ? (
-              <span>
+              <>
                 θ<sub>t21</sub>
-              </span>
+              </>
             ) : (
-              <span>
+              <>
                 (1−θ<sub>t21</sub>)
-              </span>
+              </>
             );
           const T2_f0 =
             p.t2 === 1 ? (
-              <span>
+              <>
                 θ<sub>t20</sub>
-              </span>
+              </>
             ) : (
-              <span>
+              <>
                 (1−θ<sub>t20</sub>)
-              </span>
+              </>
             );
 
           const Zsym = (
@@ -634,369 +757,695 @@ function QFunctionsPanel({
             </>
           );
 
+          const boxes: ReactNode[] = [];
+
+          // Case A: f,t1 bekend — t2 ontbreekt → q(t2 | f,t1)
+          if (!missingF && !missingT1 && missingT2) {
+            // q(t2=1 | f,t1)
+            boxes.push(
+              <EBox
+                key={`${idx}-t2-1`}
+                id={`${idx}-t2-1`}
+                title={
+                  <>
+                    <Q i={idx}>
+                      t₂=1 | f={p.f}, t₁={p.t1}
+                    </Q>
+                  </>
+                }
+                rhs={
+                  p.f === 1 ? (
+                    <>
+                      θ<sub>t21</sub>
+                    </>
+                  ) : (
+                    <>
+                      θ<sub>t20</sub>
+                    </>
+                  )
+                }
+                value={isAfterE && e.length >= 2 ? e[0] : undefined}
+                steps={[
+                  <>
+                    <StepLabel>
+                      Weight is the probability of the completed row given the
+                      known data
+                    </StepLabel>
+                    P(t₂=1 | f={p.f}, t₁={p.t1})
+                  </>,
+                  <>
+                    <StepLabel>Rewrite the conditional probability</StepLabel>={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(t₂=1, f={p.f}, t₁={p.t1})
+                        </>
+                      }
+                      den={
+                        <>
+                          <span>∑</span>
+                          <sub>t₂</sub> P(t₂, f={p.f}, t₁={p.t1})
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>
+                      Simplify according to the Bayesian net
+                    </StepLabel>
+                    ={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(t₂=1|f={p.f})·P(f={p.f})·P(t₁={p.t1}|f={p.f})
+                        </>
+                      }
+                      den={
+                        <>
+                          <span>∑</span>
+                          <sub>t₂</sub> P(t₂|f={p.f})·P(f={p.f})·P(t₁={p.t1}|f=
+                          {p.f})
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>Simplify numerator and denominator</StepLabel>=
+                    P(t₂=1 | f={p.f})
+                  </>,
+                  <>
+                    <StepLabel>Fill in theta</StepLabel>={" "}
+                    {p.f === 1 ? (
+                      <>
+                        θ<sub>t21</sub>
+                      </>
+                    ) : (
+                      <>
+                        θ<sub>t20</sub>
+                      </>
+                    )}
+                  </>,
+                ]}
+              />
+            );
+
+            // q(t2=0 | f,t1)
+            boxes.push(
+              <EBox
+                key={`${idx}-t2-0`}
+                id={`${idx}-t2-0`}
+                title={
+                  <>
+                    <Q i={idx}>
+                      t₂=0 | f={p.f}, t₁={p.t1}
+                    </Q>
+                  </>
+                }
+                rhs={
+                  p.f === 1 ? (
+                    <>
+                      (1−θ<sub>t21</sub>)
+                    </>
+                  ) : (
+                    <>
+                      (1−θ<sub>t20</sub>)
+                    </>
+                  )
+                }
+                value={isAfterE && e.length >= 2 ? e[1] : undefined}
+                steps={[
+                  <>
+                    <StepLabel>
+                      Weight is the probability of the completed row given the
+                      known data
+                    </StepLabel>
+                    P(t₂=0 | f={p.f}, t₁={p.t1})
+                  </>,
+                  <>
+                    <StepLabel>Rewrite the conditional probability</StepLabel>={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(t₂=0, f={p.f}, t₁={p.t1})
+                        </>
+                      }
+                      den={
+                        <>
+                          <span>∑</span>
+                          <sub>t₂</sub> P(t₂, f={p.f}, t₁={p.t1})
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>
+                      Simplify according to the Bayesian net
+                    </StepLabel>
+                    ={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(t₂=0|f={p.f})·P(f={p.f})·P(t₁={p.t1}|f={p.f})
+                        </>
+                      }
+                      den={
+                        <>
+                          <span>∑</span>
+                          <sub>t₂</sub> P(t₂|f={p.f})·P(f={p.f})·P(t₁={p.t1}|f=
+                          {p.f})
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>Simplify numerator and denominator</StepLabel>=
+                    P(t₂=0 | f={p.f})
+                  </>,
+                  <>
+                    <StepLabel>Fill in theta</StepLabel>={" "}
+                    {p.f === 1 ? (
+                      <>
+                        (1−θ<sub>t21</sub>)
+                      </>
+                    ) : (
+                      <>
+                        (1−θ<sub>t20</sub>)
+                      </>
+                    )}
+                  </>,
+                ]}
+              />
+            );
+          }
+
+          // Case B: f,t2 bekend — t1 ontbreekt → q(t1 | f,t2)
+          if (!missingF && missingT1 && !missingT2) {
+            boxes.push(
+              <EBox
+                key={`${idx}-t1-1`}
+                id={`${idx}-t1-1`}
+                title={
+                  <>
+                    <Q i={idx}>
+                      t₁=1 | f={p.f}, t₂={p.t2}
+                    </Q>
+                  </>
+                }
+                rhs={
+                  p.f === 1 ? (
+                    <>
+                      θ<sub>t11</sub>
+                    </>
+                  ) : (
+                    <>
+                      θ<sub>t10</sub>
+                    </>
+                  )
+                }
+                value={isAfterE && e.length >= 2 ? e[0] : undefined}
+                steps={[
+                  <>
+                    <StepLabel>
+                      Weight is the probability of the completed row given the
+                      known data
+                    </StepLabel>
+                    P(t₁=1 | f={p.f}, t₂={p.t2})
+                  </>,
+                  <>
+                    <StepLabel>Rewrite the conditional probability</StepLabel>={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(t₁=1, f={p.f}, t₂={p.t2})
+                        </>
+                      }
+                      den={
+                        <>
+                          <span>∑</span>
+                          <sub>t₁</sub> P(t₁, f={p.f}, t₂={p.t2})
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>
+                      Simplify according to the Bayesian net
+                    </StepLabel>
+                    ={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(t₁=1|f={p.f})·P(f={p.f})·P(t₂={p.t2}|f={p.f})
+                        </>
+                      }
+                      den={
+                        <>
+                          <span>∑</span>
+                          <sub>t₁</sub> P(t₁|f={p.f})·P(f={p.f})·P(t₂={p.t2}|f=
+                          {p.f})
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>Simplify numerator and denominator</StepLabel>=
+                    P(t₁=1 | f={p.f})
+                  </>,
+                  <>
+                    <StepLabel>Fill in theta</StepLabel>={" "}
+                    {p.f === 1 ? (
+                      <>
+                        θ<sub>t11</sub>
+                      </>
+                    ) : (
+                      <>
+                        θ<sub>t10</sub>
+                      </>
+                    )}
+                  </>,
+                ]}
+              />
+            );
+
+            boxes.push(
+              <EBox
+                key={`${idx}-t1-0`}
+                id={`${idx}-t1-0`}
+                title={
+                  <>
+                    <Q i={idx}>
+                      t₁=0 | f={p.f}, t₂={p.t2}
+                    </Q>
+                  </>
+                }
+                rhs={
+                  p.f === 1 ? (
+                    <>
+                      (1−θ<sub>t11</sub>)
+                    </>
+                  ) : (
+                    <>
+                      (1−θ<sub>t10</sub>)
+                    </>
+                  )
+                }
+                value={isAfterE && e.length >= 2 ? e[1] : undefined}
+                steps={[
+                  <>
+                    <StepLabel>
+                      Weight is the probability of the completed row given the
+                      known data
+                    </StepLabel>
+                    P(t₁=0 | f={p.f}, t₂={p.t2})
+                  </>,
+                  <>
+                    <StepLabel>Rewrite the conditional probability</StepLabel>={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(t₁=0, f={p.f}, t₂={p.t2})
+                        </>
+                      }
+                      den={
+                        <>
+                          <span>∑</span>
+                          <sub>t₁</sub> P(t₁, f={p.f}, t₂={p.t2})
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>
+                      Simplify according to the Bayesian net
+                    </StepLabel>
+                    ={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(t₁=0|f={p.f})·P(f={p.f})·P(t₂={p.t2}|f={p.f})
+                        </>
+                      }
+                      den={
+                        <>
+                          <span>∑</span>
+                          <sub>t₁</sub> P(t₁|f={p.f})·P(f={p.f})·P(t₂={p.t2}|f=
+                          {p.f})
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>Simplify numerator and denominator</StepLabel>=
+                    P(t₁=0 | f={p.f})
+                  </>,
+                  <>
+                    <StepLabel>Fill in theta</StepLabel>={" "}
+                    {p.f === 1 ? (
+                      <>
+                        (1−θ<sub>t11</sub>)
+                      </>
+                    ) : (
+                      <>
+                        (1−θ<sub>t10</sub>)
+                      </>
+                    )}
+                  </>,
+                ]}
+              />
+            );
+          }
+
+          // Case C: t1,t2 bekend — f ontbreekt → q(f | t1,t2)
+          if (missingF && !missingT1 && !missingT2) {
+            boxes.push(
+              <EBox
+                key={`${idx}-f-1`}
+                id={`${idx}-f-1`}
+                title={
+                  <>
+                    <Q i={idx}>
+                      <em>f</em>=1 | t₁={p.t1}, t₂={p.t2}
+                    </Q>
+                  </>
+                }
+                num={
+                  <>
+                    <span>
+                      θ<sub>f</sub>·
+                    </span>
+                    {T1_f1}·{T2_f1}
+                  </>
+                }
+                den={<>{Zsym}</>}
+                value={isAfterE && e.length >= 2 ? e[0] : undefined}
+                steps={[
+                  <>
+                    <StepLabel>
+                      Weight is the probability of the completed row given the
+                      known data
+                    </StepLabel>
+                    P(f=1 | t₁={p.t1}, t₂={p.t2})
+                  </>,
+                  <>
+                    <StepLabel>Rewrite the conditional probability</StepLabel>={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(f=1, t₁={p.t1}, t₂={p.t2})
+                        </>
+                      }
+                      den={
+                        <>
+                          P(t₁={p.t1}, t₂={p.t2})
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>
+                      Simplify according to the Bayesian net
+                    </StepLabel>
+                    ={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(f=1)·P(t₁={p.t1}|f=1)·P(t₂={p.t2}|f=1)
+                        </>
+                      }
+                      den={
+                        <>
+                          P(t₂={p.t2}|f=1)·P(f=1) + P(t₂={p.t2}|f=0)·P(f=0)
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>Simplify numerator and denominator</StepLabel>={" "}
+                    <Frac
+                      num={
+                        <>
+                          θ<sub>f</sub>·{T1_f1}·{T2_f1}
+                        </>
+                      }
+                      den={<>{Zsym}</>}
+                    />
+                  </>,
+                  <>
+                    <StepLabel>Fill in theta</StepLabel>= zoals hierboven.
+                  </>,
+                ]}
+              />
+            );
+
+            boxes.push(
+              <EBox
+                key={`${idx}-f-0`}
+                id={`${idx}-f-0`}
+                title={
+                  <>
+                    <Q i={idx}>
+                      <em>f</em>=0 | t₁={p.t1}, t₂={p.t2}
+                    </Q>
+                  </>
+                }
+                num={
+                  <>
+                    (1−θ<sub>f</sub>)·{T1_f0}·{T2_f0}
+                  </>
+                }
+                den={<>{Zsym}</>}
+                value={isAfterE && e.length >= 2 ? e[1] : undefined}
+                steps={[
+                  <>
+                    <StepLabel>
+                      Weight is the probability of the completed row given the
+                      known data
+                    </StepLabel>
+                    P(f=0 | t₁={p.t1}, t₂={p.t2})
+                  </>,
+                  <>
+                    <StepLabel>Rewrite the conditional probability</StepLabel>={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(f=0, t₁={p.t1}, t₂={p.t2})
+                        </>
+                      }
+                      den={
+                        <>
+                          P(t₁={p.t1}, t₂={p.t2})
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>
+                      Simplify according to the Bayesian net
+                    </StepLabel>
+                    ={" "}
+                    <Frac
+                      num={
+                        <>
+                          P(f=0)·P(t₁={p.t1}|f=0)·P(t₂={p.t2}|f=0)
+                        </>
+                      }
+                      den={
+                        <>
+                          P(t₂={p.t2}|f=1)·P(f=1) + P(t₂={p.t2}|f=0)·P(f=0)
+                        </>
+                      }
+                    />
+                  </>,
+                  <>
+                    <StepLabel>Simplify numerator and denominator</StepLabel>={" "}
+                    <Frac
+                      num={
+                        <>
+                          (1−θ<sub>f</sub>)·{T1_f0}·{T2_f0}
+                        </>
+                      }
+                      den={<>{Zsym}</>}
+                    />
+                  </>,
+                  <>
+                    <StepLabel>Fill in theta</StepLabel>= zoals hierboven.
+                  </>,
+                ]}
+              />
+            );
+          }
+
+          // Case D: t2 bekend — f én t1 ontbreken → q(f,t1 | t2)
+          if (missingF && missingT1 && !missingT2) {
+            const labelFor = (ft: "1-1" | "1-0" | "0-1" | "0-0") => {
+              const [fVal, t1Val] = ft.split("-");
+              return (
+                <Q i={idx}>
+                  <em>f</em>={fVal}, t₁={t1Val} | t₂={p.t2}
+                </Q>
+              );
+            };
+
+            const numFor: Record<
+              "1-1" | "1-0" | "0-1" | "0-0",
+              React.ReactNode
+            > = {
+              "1-1": (
+                <>
+                  θ<sub>f</sub>·θ<sub>t11</sub>·{T2_f1}
+                </>
+              ),
+              "1-0": (
+                <>
+                  θ<sub>f</sub>·(1−θ<sub>t11</sub>)·{T2_f1}
+                </>
+              ),
+              "0-1": (
+                <>
+                  (1−θ<sub>f</sub>)·θ<sub>t10</sub>·{T2_f0}
+                </>
+              ),
+              "0-0": (
+                <>
+                  (1−θ<sub>f</sub>)·(1−θ<sub>t10</sub>)·{T2_f0}
+                </>
+              ),
+            };
+
+            const valFor = (ft: "1-1" | "1-0" | "0-1" | "0-0") =>
+              isAfterE && e.length >= 4
+                ? ft === "1-1"
+                  ? e[0]
+                  : ft === "1-0"
+                  ? e[1]
+                  : ft === "0-1"
+                  ? e[2]
+                  : e[3]
+                : undefined;
+
+            const stepsFor = (ft: "1-1" | "1-0" | "0-1" | "0-0") => {
+              const [fVal, t1Val] = ft.split("-");
+
+              // P(·)-notatie voor stap 4 (geen thetas!)
+              const probNumFor: Record<typeof ft, React.ReactNode> = {
+                "1-1": (
+                  <>
+                    P(<em>f</em>=1)·P(t₁=1|<em>f</em>=1)·P(t₂={p.t2}|<em>f</em>
+                    =1)
+                  </>
+                ),
+                "1-0": (
+                  <>
+                    P(<em>f</em>=1)·P(t₁=0|<em>f</em>=1)·P(t₂={p.t2}|<em>f</em>
+                    =1)
+                  </>
+                ),
+                "0-1": (
+                  <>
+                    P(<em>f</em>=0)·P(t₁=1|<em>f</em>=0)·P(t₂={p.t2}|<em>f</em>
+                    =0)
+                  </>
+                ),
+                "0-0": (
+                  <>
+                    P(<em>f</em>=0)·P(t₁=0|<em>f</em>=0)·P(t₂={p.t2}|<em>f</em>
+                    =0)
+                  </>
+                ),
+              };
+
+              const probDen = (
+                <>
+                  P(t₂={p.t2}|<em>f</em>=1)·P(<em>f</em>=1) + P(t₂={p.t2}|
+                  <em>f</em>=0)·P(<em>f</em>=0)
+                </>
+              );
+
+              return [
+                <>
+                  <StepLabel>
+                    Weight is the probability of the completed row given the
+                    known data
+                  </StepLabel>
+                  q<sup>{idx}</sup>(<em>f</em>={fVal}, t₁={t1Val} | t₂={p.t2})
+                </>,
+                <>
+                  <StepLabel>Rewrite the conditional probability</StepLabel> ={" "}
+                  <Frac
+                    num={
+                      <>
+                        P(<em>f</em>={fVal}, t₁={t1Val}, t₂={p.t2})
+                      </>
+                    }
+                    den={<>P(t₂={p.t2})</>}
+                  />
+                </>,
+                <>
+                  <StepLabel>Simplify according to the Bayesian net</StepLabel>{" "}
+                  ={" "}
+                  <Frac
+                    num={
+                      <>
+                        P(<em>f</em>={fVal})·P(t₁={t1Val}|<em>f</em>={fVal}
+                        )·P(t₂={p.t2}|<em>f</em>={fVal})
+                      </>
+                    }
+                    den={
+                      <>
+                        <span>∑</span>
+                        <sub>f,t₁</sub> P(f)·P(t₁|f)·P(t₂={p.t2}|f)
+                      </>
+                    }
+                  />
+                </>,
+                <>
+                  <StepLabel>Simplify numerator and denominator</StepLabel> ={" "}
+                  <Frac num={probNumFor[ft]} den={probDen} />
+                </>,
+                <>
+                  <StepLabel>Fill in theta</StepLabel> ={" "}
+                  <Frac num={numFor[ft]} den={<>{Zsym}</>} />
+                </>,
+              ];
+            };
+
+            (["1-1", "1-0", "0-1", "0-0"] as const).forEach((ft) =>
+              boxes.push(
+                <EBox
+                  key={`${idx}-${ft}`}
+                  id={`${idx}-${ft}`}
+                  title={labelFor(ft)}
+                  num={numFor[ft]}
+                  den={<>{Zsym}</>}
+                  value={valFor(ft)}
+                  steps={stepsFor(ft)}
+                />
+              )
+            );
+          }
+
+          // Case E: complete row
+          if (!missingF && !missingT1 && !missingT2) {
+            boxes.push(
+              <EBox
+                key={`${idx}-complete`}
+                id={`${idx}-complete`}
+                title={<QPlain i={idx} />}
+                value={1}
+                steps={[
+                  <>
+                    <StepLabel>Complete observation</StepLabel>
+                    All variables are known; the weight is exactly 1.
+                  </>,
+                ]}
+              />
+            );
+          }
+
           return (
             <section key={i} className="space-y-3">
               <div className="text-xs text-gray-500">row {idx}</div>
-
-              {/* t2 ontbreekt (triviaal, 2 weights) */}
-              {!missingF && !missingT1 && missingT2 && (
-                <div className="space-y-3">
-                  {/* kleine derivatie-box in dezelfde stijlfamilie */}
-                  <div className="border rounded bg-slate-50 p-3 font-mono text-sm">
-                    <div className="font-semibold mb-1">Derivation</div>
-                    <div className="flex items-center gap-2">
-                      <span>
-                        q<sup>{idx}</sup>(t₂ | f={p.f}, t₁={p.t1}) =
-                      </span>
-                      <Frac
-                        num={
-                          <>
-                            P(t₂, f={p.f}, t₁={p.t1})
-                          </>
-                        }
-                        den={
-                          <>
-                            ∑<sub>t₂∈&#123;0,1&#125;</sub> P(t₂, f={p.f}, t₁=
-                            {p.t1})
-                          </>
-                        }
-                      />
-                    </div>
-                    <div className="mt-1">
-                      ={" "}
-                      <Frac
-                        num={
-                          <>
-                            P(f={p.f})·P(t₁={p.t1}|f={p.f})·P(t₂|f={p.f})
-                          </>
-                        }
-                        den={
-                          <>
-                            ∑<sub>t₂</sub>
-                            P(f={p.f})·P(t₁={p.t1}|f={p.f})·P(t₂|f={p.f})
-                          </>
-                        }
-                      />{" "}
-                      ⇒ P(t₂ | f={p.f})
-                    </div>
-                  </div>
-
-                  <EBox
-                    title={
-                      <>
-                        <Q i={idx}>
-                          t₂=1 | f={p.f}, t₁={p.t1}
-                        </Q>
-                      </>
-                    }
-                    rhs={
-                      p.f === 1 ? (
-                        <>
-                          θ<sub>t21</sub>
-                        </>
-                      ) : (
-                        <>
-                          θ<sub>t20</sub>
-                        </>
-                      )
-                    }
-                    value={isAfterE && e.length >= 2 ? e[0] : undefined}
-                  />
-                  <EBox
-                    title={
-                      <>
-                        <Q i={idx}>
-                          t₂=0 | f={p.f}, t₁={p.t1}
-                        </Q>
-                      </>
-                    }
-                    rhs={
-                      p.f === 1 ? (
-                        <>
-                          (1−θ<sub>t21</sub>)
-                        </>
-                      ) : (
-                        <>
-                          (1−θ<sub>t20</sub>)
-                        </>
-                      )
-                    }
-                    value={isAfterE && e.length >= 2 ? e[1] : undefined}
-                  />
-                </div>
-              )}
-
-              {/* t1 ontbreekt (triviaal, 2 weights) */}
-              {!missingF && missingT1 && !missingT2 && (
-                <div className="space-y-3">
-                  <div className="border rounded bg-slate-50 p-3 font-mono text-sm">
-                    <div className="font-semibold mb-1">Derivation</div>
-                    <div className="flex items-center gap-2">
-                      <span>
-                        q<sup>{idx}</sup>(t₁ | f={p.f}, t₂={p.t2}) =
-                      </span>
-                      <Frac
-                        num={
-                          <>
-                            P(t₁, f={p.f}, t₂={p.t2})
-                          </>
-                        }
-                        den={
-                          <>
-                            ∑<sub>t₁∈&#123;0,1&#125;</sub> P(t₁, f={p.f}, t₂=
-                            {p.t2})
-                          </>
-                        }
-                      />
-                    </div>
-                    <div className="mt-1">
-                      ={" "}
-                      <Frac
-                        num={
-                          <>
-                            P(f={p.f})·P(t₁|f={p.f})·P(t₂={p.t2}|f={p.f})
-                          </>
-                        }
-                        den={
-                          <>
-                            ∑<sub>t₁</sub>
-                            P(f={p.f})·P(t₁|f={p.f})·P(t₂={p.t2}|f={p.f})
-                          </>
-                        }
-                      />{" "}
-                      ⇒ P(t₁ | f={p.f})
-                    </div>
-                  </div>
-
-                  <EBox
-                    title={
-                      <>
-                        <Q i={idx}>
-                          t₁=1 | f={p.f}, t₂={p.t2}
-                        </Q>
-                      </>
-                    }
-                    rhs={
-                      p.f === 1 ? (
-                        <>
-                          θ<sub>t11</sub>
-                        </>
-                      ) : (
-                        <>
-                          θ<sub>t10</sub>
-                        </>
-                      )
-                    }
-                    value={isAfterE && e.length >= 2 ? e[0] : undefined}
-                  />
-                  <EBox
-                    title={
-                      <>
-                        <Q i={idx}>
-                          t₁=0 | f={p.f}, t₂={p.t2}
-                        </Q>
-                      </>
-                    }
-                    rhs={
-                      p.f === 1 ? (
-                        <>
-                          (1−θ<sub>t11</sub>)
-                        </>
-                      ) : (
-                        <>
-                          (1−θ<sub>t10</sub>)
-                        </>
-                      )
-                    }
-                    value={isAfterE && e.length >= 2 ? e[1] : undefined}
-                  />
-                </div>
-              )}
-
-              {/* f ontbreekt (2 weights, breuk met θ's) */}
-              {missingF && !missingT1 && !missingT2 && (
-                <div className="space-y-3">
-                  <div className="border rounded bg-slate-50 p-3 font-mono text-sm">
-                    <div className="font-semibold mb-1">Definition</div>
-                    <div className="flex items-center gap-2">
-                      <span>
-                        q<sup>{idx}</sup>(f | t₁={p.t1}, t₂={p.t2}) =
-                      </span>
-                      <Frac
-                        num={
-                          <>
-                            P(f, t₁={p.t1}, t₂={p.t2})
-                          </>
-                        }
-                        den={
-                          <>
-                            P(t₁={p.t1}, t₂={p.t2})
-                          </>
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <EBox
-                    title={
-                      <>
-                        <Q i={idx}>
-                          <em>f</em>=1 | t₁={p.t1}, t₂={p.t2}
-                        </Q>
-                      </>
-                    }
-                    num={
-                      <>
-                        θ<sub>f</sub>·{T1_f1}·{T2_f1}
-                      </>
-                    }
-                    den={<>{Zsym}</>}
-                    value={isAfterE && e.length >= 2 ? e[0] : undefined}
-                  />
-
-                  <EBox
-                    title={
-                      <>
-                        <Q i={idx}>
-                          <em>f</em>=0 | t₁={p.t1}, t₂={p.t2}
-                        </Q>
-                      </>
-                    }
-                    num={
-                      <>
-                        (1−θ<sub>f</sub>)·{T1_f0}·{T2_f0}
-                      </>
-                    }
-                    den={<>{Zsym}</>}
-                    value={isAfterE && e.length >= 2 ? e[1] : undefined}
-                  />
-                </div>
-              )}
-
-              {/* f & t1 ontbreken (4 weights, joint) */}
-              {missingF && missingT1 && !missingT2 && (
-                <div className="space-y-3">
-                  {/* Derivation: nu mét extra stap “in functie van P(·)” */}
-                  <div className="border rounded bg-slate-50 p-3 font-mono text-sm">
-                    <div className="font-semibold mb-1">Derivation</div>
-
-                    {/* 1) Bayes */}
-                    <div className="flex items-center gap-2">
-                      <span>
-                        q<sup>{idx}</sup>(f,t₁ | t₂={p.t2}) =
-                      </span>
-                      <Frac
-                        num={<>P(f,t₁,t₂={p.t2})</>}
-                        den={<>P(t₂={p.t2})</>}
-                      />
-                    </div>
-
-                    {/* 2) Factoriseer joint & evidence als som */}
-                    <div className="mt-1">
-                      ={" "}
-                      <Frac
-                        num={<>P(f)·P(t₁|f)·P(t₂={p.t2}|f)</>}
-                        den={
-                          <>
-                            ∑<sub>f,t₁</sub> P(f)·P(t₁|f)·P(t₂={p.t2}|f)
-                          </>
-                        }
-                      />
-                    </div>
-
-                    {/* 3) Evidence expliciet in P-vorm */}
-                    <div className="mt-1">
-                      ={" "}
-                      <Frac
-                        num={<>P(f)·P(t₁|f)·P(t₂={p.t2}|f)</>}
-                        den={
-                          <>
-                            P(t₂={p.t2}|f=1)·P(f=1) + P(t₂={p.t2}|f=0)·P(f=0)
-                          </>
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <EBox
-                    title={
-                      <>
-                        <Q i={idx}>
-                          <em>f</em>=1, t₁=1 | t₂={p.t2}
-                        </Q>
-                      </>
-                    }
-                    num={
-                      <>
-                        θ<sub>f</sub>·θ<sub>t11</sub>·{T2_f1}
-                      </>
-                    }
-                    den={<>{Zsym}</>}
-                    value={isAfterE && e.length >= 4 ? e[0] : undefined}
-                  />
-                  <EBox
-                    title={
-                      <>
-                        <Q i={idx}>
-                          <em>f</em>=1, t₁=0 | t₂={p.t2}
-                        </Q>
-                      </>
-                    }
-                    num={
-                      <>
-                        θ<sub>f</sub>·(1−θ<sub>t11</sub>)·{T2_f1}
-                      </>
-                    }
-                    den={<>{Zsym}</>}
-                    value={isAfterE && e.length >= 4 ? e[1] : undefined}
-                  />
-                  <EBox
-                    title={
-                      <>
-                        <Q i={idx}>
-                          <em>f</em>=0, t₁=1 | t₂={p.t2}
-                        </Q>
-                      </>
-                    }
-                    num={
-                      <>
-                        (1−θ<sub>f</sub>)·θ<sub>t10</sub>·{T2_f0}
-                      </>
-                    }
-                    den={<>{Zsym}</>}
-                    value={isAfterE && e.length >= 4 ? e[2] : undefined}
-                  />
-                  <EBox
-                    title={
-                      <>
-                        <Q i={idx}>
-                          <em>f</em>=0, t₁=0 | t₂={p.t2}
-                        </Q>
-                      </>
-                    }
-                    num={
-                      <>
-                        (1−θ<sub>f</sub>)·(1−θ<sub>t10</sub>)·{T2_f0}
-                      </>
-                    }
-                    den={<>{Zsym}</>}
-                    value={isAfterE && e.length >= 4 ? e[3] : undefined}
-                  />
-                </div>
-              )}
-
-              {/* complete rij */}
-              {!missingF && !missingT1 && !missingT2 && (
-                <EBox
-                  title={
-                    <>
-                      <Q i={idx}>— (complete)</Q>
-                    </>
-                  }
-                  rhs={<>1</>}
-                  value={1}
-                />
-              )}
+              <div className="space-y-3">{boxes}</div>
             </section>
           );
         })}
@@ -1005,6 +1454,7 @@ function QFunctionsPanel({
   );
 }
 
+/** ───────────────── M-step panel (ongewijzigde inhoud, maar we gebruiken elders flash) ───────────────── */
 function MStepPanel({
   currentStep,
   params,
@@ -1020,7 +1470,6 @@ function MStepPanel({
   selectedParameter: string | null;
   onParameterSelect: (p: string | null) => void;
 }) {
-  // S: bereken M-stap sommen (blijft hetzelfde)
   const calc = () => {
     const N = data.length;
     let sum_qf1 = 0;
@@ -1099,43 +1548,12 @@ function MStepPanel({
     const theta_t2_f0 =
       denom_f0 > 0 ? num_t2_f0 / denom_f0 : params.theta_t2_f0;
 
-    return {
-      N,
-      sum_qf1,
-      denom_f1,
-      denom_f0,
-      num_t1_f1,
-      num_t1_f0,
-      num_t2_f1,
-      num_t2_f0,
-      theta_f,
-      theta_t1_f1,
-      theta_t1_f0,
-      theta_t2_f1,
-      theta_t2_f0,
-    };
+    return { theta_f, theta_t1_f1, theta_t1_f0, theta_t2_f1, theta_t2_f0 };
   };
 
   const m = calc();
 
-  // Belangrijk: toon *huidige* params tot de M-stap uitgevoerd is
-  const isUpdated = currentStep === "m-completed";
-  const display = isUpdated
-    ? {
-        theta_f: m.theta_f,
-        theta_t1_f1: m.theta_t1_f1,
-        theta_t1_f0: m.theta_t1_f0,
-        theta_t2_f1: m.theta_t2_f1,
-        theta_t2_f0: m.theta_t2_f0,
-      }
-    : {
-        theta_f: params.theta_f,
-        theta_t1_f1: params.theta_t1_f1,
-        theta_t1_f0: params.theta_t1_f0,
-        theta_t2_f1: params.theta_t2_f1,
-        theta_t2_f0: params.theta_t2_f0,
-      };
-
+  // Box UI
   const Box = ({
     id,
     title,
@@ -1150,8 +1568,6 @@ function MStepPanel({
     value: number;
   }) => {
     const selected = selectedParameter === id;
-
-    // kleur de breukdelen alleen wanneer geselecteerd
     const coloredNum = selected ? (
       <span className="text-sky-700 font-semibold">{num}</span>
     ) : (
@@ -1172,21 +1588,21 @@ function MStepPanel({
         }`}
         onClick={() => onParameterSelect(selected ? null : id)}
       >
-        <div className="font-mono text-lg mb-2">
-          {title} ={" "}
+        {/* alles op één regel */}
+        <div className="font-mono text-lg flex flex-wrap items-center gap-2">
+          {title}
+          <span>=</span>
           <Frac num={coloredNum} den={coloredDen} className="align-middle" />
+          <span className="font-bold">= {value.toFixed(3)}</span>
         </div>
-        <div className="mt-1 text-lg font-bold">= {value.toFixed(3)}</div>
-        {/* uitleg weggehaald */}
       </div>
     );
   };
 
+  const display = currentStep === "m-completed" ? m : params;
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>θ-updates (M-step)</CardTitle>
-      </CardHeader>
       <CardContent className="space-y-3">
         <Box
           id="theta_f"
@@ -1289,6 +1705,7 @@ function MStepPanel({
   );
 }
 
+/** ───────────────── Detailkaart (ongewijzigd) ───────────────── */
 function RowCalculationDetails({
   selectedRow,
   data,
@@ -1306,7 +1723,8 @@ function RowCalculationDetails({
   const missingF = point.f === undefined;
   const missingT1 = point.t1 === undefined;
   const missingT2 = point.t2 === undefined;
-  const fmt = (x: number, d = 6) => x.toFixed(d);
+  const fmt = (x: number, d = 3) => x.toFixed(d);
+
   const T2_given_f1 =
     point.t2 === 1 ? (
       <span>
@@ -1503,10 +1921,6 @@ function RowCalculationDetails({
                       den={Den}
                     />
                   </div>
-                  <div className="text-xs text-gray-700">
-                    Numeriek: [{fmt(exp[0])}, {fmt(exp[1])}, {fmt(exp[2])},{" "}
-                    {fmt(exp[3])}]
-                  </div>
                 </div>
               </section>
             )}
@@ -1516,6 +1930,7 @@ function RowCalculationDetails({
   );
 }
 
+/** ───────────────── Main ───────────────── */
 export default function ExpectationMaximizationDemo() {
   const [params, setParams] = useState<BayesianParams>({
     theta_f: 0.5,
@@ -1524,6 +1939,7 @@ export default function ExpectationMaximizationDemo() {
     theta_t2_f1: 0.75,
     theta_t2_f0: 0.1,
   });
+
   const [data, setData] = useState<DataPoint[]>([
     { t1: 1, f: 1 },
     { f: 1, t1: 1, t2: 1 },
@@ -1531,11 +1947,16 @@ export default function ExpectationMaximizationDemo() {
     { t1: 1, t2: 0, f: 1 },
     { t2: 1 },
   ]);
+
   const [iteration, setIteration] = useState(0);
   const [currentStep, setCurrentStep] = useState<
     "ready" | "e-completed" | "m-completed"
   >("ready");
+
   const [expectations, setExpectations] = useState<number[][]>([]);
+  const [prevExpectations, setPrevExpectations] = useState<number[][]>([]);
+  const [prevParams, setPrevParams] = useState<BayesianParams | null>(null);
+
   const [busy, setBusy] = useState(false);
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [selectedParameter, setSelectedParameter] = useState<string | null>(
@@ -1543,8 +1964,17 @@ export default function ExpectationMaximizationDemo() {
   );
   const [setSelectedQRow] = useState<number | null>(null);
 
+  // flash flags
+  const [eTick, setETick] = useState(0);
+  const [mTick, setMTick] = useState(0);
+
+  const flashE = useFlashTick(eTick, 1900);
+  const flashM = useFlashTick(mTick, 1900);
+
   const runEStep = () => {
     setBusy(true);
+    setPrevExpectations(expectations);
+
     const newExpectations: number[][] = [];
     data.forEach((point, i) => {
       const missingF = point.f === undefined;
@@ -1595,6 +2025,8 @@ export default function ExpectationMaximizationDemo() {
     setCurrentStep("e-completed");
     setBusy(false);
     setSelectedParameter(null);
+
+    setETick((t) => t + 1);
   };
 
   const runMStep = () => {
@@ -1603,6 +2035,7 @@ export default function ExpectationMaximizationDemo() {
       setBusy(false);
       return;
     }
+
     const N = data.length;
     let sum_qf1 = 0;
     let denom_f1 = 0,
@@ -1611,6 +2044,7 @@ export default function ExpectationMaximizationDemo() {
       num_t1_f0 = 0;
     let num_t2_f1 = 0,
       num_t2_f0 = 0;
+
     data.forEach((p, i) => {
       const e = expectations[i] || [];
       const missingF = p.f === undefined;
@@ -1631,6 +2065,7 @@ export default function ExpectationMaximizationDemo() {
       sum_qf1 += qf1;
       denom_f1 += qf1;
       denom_f0 += qf0;
+
       if (!missingF && !missingT1) {
         if (p.f === 1 && p.t1 === 1) num_t1_f1 += 1;
         if (p.f === 0 && p.t1 === 1) num_t1_f0 += 1;
@@ -1646,6 +2081,7 @@ export default function ExpectationMaximizationDemo() {
         num_t1_f1 += e[0] ?? 0;
         num_t1_f0 += e[2] ?? 0;
       }
+
       if (!missingF && !missingT2) {
         if (p.f === 1 && p.t2 === 1) num_t2_f1 += 1;
         if (p.f === 0 && p.t2 === 1) num_t2_f0 += 1;
@@ -1673,6 +2109,10 @@ export default function ExpectationMaximizationDemo() {
       denom_f1 > 0 ? num_t2_f1 / denom_f1 : params.theta_t2_f1;
     const new_theta_t2_f0 =
       denom_f0 > 0 ? num_t2_f0 / denom_f0 : params.theta_t2_f0;
+
+    // bewaar vorige params voor highlight
+    setPrevParams(params);
+
     setParams({
       theta_f: new_theta_f,
       theta_t1_f1: new_theta_t1_f1,
@@ -1680,9 +2120,12 @@ export default function ExpectationMaximizationDemo() {
       theta_t2_f1: new_theta_t2_f1,
       theta_t2_f0: new_theta_t2_f0,
     });
+    setPrevParams(params);
     setIteration((v) => v + 1);
     setCurrentStep("m-completed");
     setBusy(false);
+
+    setMTick((t) => t + 1);
   };
 
   const reset = () => {
@@ -1695,14 +2138,44 @@ export default function ExpectationMaximizationDemo() {
     });
     setIteration(0);
     setExpectations([]);
+    setPrevExpectations([]);
+    setPrevParams(null);
     setCurrentStep("ready");
     setBusy(false);
     setSelectedRow(null);
     setSelectedParameter(null);
   };
+
   const canRunE =
     !busy && (currentStep === "ready" || currentStep === "m-completed");
   const canRunM = !busy && currentStep === "e-completed";
+
+  // helper om badge met flash te renderen
+  // BOVEN in de main component (bij de andere helpers)
+  const ParamBadge = ({
+    value,
+    prev,
+    step,
+  }: {
+    value: number;
+    prev?: number;
+    step: "ready" | "e-completed" | "m-completed";
+  }) => {
+    const isChanged = typeof prev === "number" && Math.abs(value - prev) > 1e-9;
+    // Pulse θ’s alleen direct na M-step
+    const shouldPulse = step === "m-completed" && flashM && isChanged;
+
+    return (
+      <Badge
+        variant="outline"
+        className={`text-[15px] px-3 py-1.5 transition-all ${
+          shouldPulse ? "em-flash-param" : ""
+        }`}
+      >
+        {value.toFixed(3)}
+      </Badge>
+    );
+  };
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -1724,6 +2197,62 @@ export default function ExpectationMaximizationDemo() {
           Reset
         </Button>
       </div>
+      <style jsx global>{`
+        @keyframes em-flash-weight {
+          0%,
+          100% {
+            background-color: transparent;
+            box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+          }
+          50% {
+            background-color: rgba(254, 243, 199, 1);
+            box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.55);
+          }
+        }
+        .em-flash-weight {
+          animation: em-flash-weight 0.6s ease-in-out 3;
+          border-radius: 0.25rem;
+        }
+
+        @keyframes em-flash-param {
+          0%,
+          100% {
+            background-color: transparent;
+            box-shadow: 0 0 0 0 rgba(132, 204, 22, 0);
+          }
+          50% {
+            background-color: rgba(236, 252, 203, 1);
+            box-shadow: 0 0 0 3px rgba(132, 204, 22, 0.55);
+          }
+        }
+        .em-flash-param {
+          animation: em-flash-param 0.6s ease-in-out 3;
+          border-radius: 0.375rem;
+        }
+
+        td.em-num-left,
+        td.em-num-right,
+        td.em-num-single {
+          position: relative;
+        }
+
+        td.em-num-left {
+          border-top: 2px solid #0284c7 !important;
+          border-bottom: 2px solid #0284c7 !important;
+          border-left: 2px solid #0284c7 !important;
+          /* géén right border -> naadloos met .em-num-right */
+        }
+        td.em-num-right {
+          border-top: 2px solid #0284c7 !important;
+          border-bottom: 2px solid #0284c7 !important;
+          border-right: 2px solid #0284c7 !important;
+          /* géén left border -> naadloos met .em-num-left */
+        }
+        td.em-num-single {
+          border: 2px solid #0284c7 !important; /* θ_f teller (enkel f) */
+        }
+      `}</style>
+
       <Card>
         <CardContent>
           <div className="grid lg:grid-cols-2 gap-6">
@@ -1735,50 +2264,68 @@ export default function ExpectationMaximizationDemo() {
               <h3 className="font-semibold mb-4">
                 Current parameters (Iteratie {iteration})
               </h3>
-              <div className="space-y-3 text-sm">
+              <div className="space-y-3 text-[15px]">
                 <div className="flex justify-between">
                   <span>
-                    P(F=1) = θ<sub>F</sub>
+                    {" "}
+                    P(F=1) = θ<sub>F</sub>{" "}
                   </span>
-                  <Badge variant="outline">{params.theta_f.toFixed(3)}</Badge>
+                  <ParamBadge
+                    value={params.theta_f}
+                    prev={prevParams?.theta_f}
+                    step={currentStep}
+                  />
                 </div>
                 <div className="flex justify-between">
                   <span>
-                    P(T₁=1|F=1) = θ<sub>t11</sub>
+                    {" "}
+                    P(T₁=1|F=1) = θ<sub>t11</sub>{" "}
                   </span>
-                  <Badge variant="outline">
-                    {params.theta_t1_f1.toFixed(3)}
-                  </Badge>
+                  <ParamBadge
+                    value={params.theta_t1_f1}
+                    prev={prevParams?.theta_t1_f1}
+                    step={currentStep}
+                  />
                 </div>
                 <div className="flex justify-between">
                   <span>
-                    P(T₁=1|F=0) = θ<sub>t10</sub>
+                    {" "}
+                    P(T₁=1|F=0) = θ<sub>t10</sub>{" "}
                   </span>
-                  <Badge variant="outline">
-                    {params.theta_t1_f0.toFixed(3)}
-                  </Badge>
+                  <ParamBadge
+                    value={params.theta_t1_f0}
+                    prev={prevParams?.theta_t1_f0}
+                    step={currentStep}
+                  />
                 </div>
                 <div className="flex justify-between">
                   <span>
-                    P(T₂=1|F=1) = θ<sub>t21</sub>
+                    {" "}
+                    P(T₂=1|F=1) = θ<sub>t21</sub>{" "}
                   </span>
-                  <Badge variant="outline">
-                    {params.theta_t2_f1.toFixed(3)}
-                  </Badge>
+                  <ParamBadge
+                    value={params.theta_t2_f1}
+                    prev={prevParams?.theta_t2_f1}
+                    step={currentStep}
+                  />
                 </div>
                 <div className="flex justify-between">
                   <span>
-                    P(T₂=1|F=0) = θ<sub>t20</sub>
+                    {" "}
+                    P(T₂=1|F=0) = θ<sub>t20</sub>{" "}
                   </span>
-                  <Badge variant="outline">
-                    {params.theta_t2_f0.toFixed(3)}
-                  </Badge>
+                  <ParamBadge
+                    value={params.theta_t2_f0}
+                    prev={prevParams?.theta_t2_f0}
+                    step={currentStep}
+                  />
                 </div>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>
@@ -1791,29 +2338,37 @@ export default function ExpectationMaximizationDemo() {
           <DataTable
             data={data}
             expectations={expectations}
+            prevExpectations={prevExpectations}
+            flashE={flashE}
+            flashEpoch={eTick}
             currentStep={currentStep}
-            onRowClick={(i) => setSelectedRow(selectedRow === i ? null : i)}
-            selectedRow={selectedRow}
             selectedParameter={selectedParameter}
           />
         </CardContent>
       </Card>
+
       <div className="grid lg:grid-cols-2 gap-6">
-        <QFunctionsPanel
-          data={data}
-          params={params}
-          expectations={expectations}
-          currentStep={currentStep}
-        />
-        <MStepPanel
-          currentStep={currentStep}
-          params={params}
-          data={data}
-          expectations={expectations}
-          selectedParameter={selectedParameter}
-          onParameterSelect={setSelectedParameter}
-        />
+        <CollapsibleSection title="Q-functions (E-step)" defaultOpen={false}>
+          <QFunctionsPanel
+            data={data}
+            params={params}
+            expectations={expectations}
+            currentStep={currentStep}
+          />
+        </CollapsibleSection>
+
+        <CollapsibleSection title="θ-updates (M-step)" defaultOpen={false}>
+          <MStepPanel
+            currentStep={currentStep}
+            params={params}
+            data={data}
+            expectations={expectations}
+            selectedParameter={selectedParameter}
+            onParameterSelect={setSelectedParameter}
+          />
+        </CollapsibleSection>
       </div>
+
       <RowCalculationDetails
         selectedRow={selectedRow}
         data={data}
