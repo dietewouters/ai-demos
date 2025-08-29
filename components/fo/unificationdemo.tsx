@@ -14,6 +14,7 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion";
+import { ChevronRight } from "lucide-react";
 
 interface UnificationStep {
   step: number;
@@ -524,9 +525,16 @@ export default function UnificationDemo() {
       )}
 
       {/* Algorithm Reference — collapsible like previous */}
-      <Card className="mt-6">
-        <details>
-          <summary className="cursor-pointer select-none p-4 font-medium">
+      <Card className="mt-8">
+        <details className="group">
+          <summary
+            className="flex items-center gap-2 cursor-pointer select-none p-4 font-medium
+                                list-none [&::-webkit-details-marker]:hidden"
+          >
+            <ChevronRight
+              className="h-4 w-4 transition-transform duration-200 group-open:rotate-90"
+              strokeWidth={1.2}
+            />
             Algorithm
           </summary>
           <CardContent className="pt-0 pb-4 px-4">

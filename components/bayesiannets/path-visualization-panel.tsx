@@ -176,8 +176,15 @@ export function PathVisualizationPanel({
         )}
         <div className=" p-3 rounded-lg border border-blue-200">
           <div className="mb-4">
-            <details className="group [&_summary::-webkit-details-marker]:hidden">
-              <summary className="cursor-pointer select-none p-4 font-medium">
+            <details className="group">
+              <summary
+                className="flex items-center gap-2 cursor-pointer select-none p-4 font-medium
+                                list-none [&::-webkit-details-marker]:hidden"
+              >
+                <ChevronRight
+                  className="h-4 w-4 transition-transform duration-200 group-open:rotate-90"
+                  strokeWidth={1.2}
+                />
                 Legend
               </summary>
 

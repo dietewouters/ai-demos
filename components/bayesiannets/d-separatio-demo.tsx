@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ChevronRight } from "lucide-react";
 
 export type DSeparationDemoProps = {
   /** Accepts either an array of networks or an object map (like your predefinedNetworks). */
@@ -297,8 +298,15 @@ export default function DSeparationDemo({
     >
       {showInstructions && (
         <Card className="mt-8">
-          <details>
-            <summary className="cursor-pointer select-none p-4 font-medium">
+          <details className="group">
+            <summary
+              className="flex items-center gap-2 cursor-pointer select-none p-4 font-medium
+                            list-none [&::-webkit-details-marker]:hidden"
+            >
+              <ChevronRight
+                className="h-4 w-4 transition-transform duration-200 group-open:rotate-90"
+                strokeWidth={1.2}
+              />
               Instructions
             </summary>
             <CardContent className="pt-0 pb-2 px-4 text-[14px] leading-5 text-slate-700">

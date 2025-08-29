@@ -9,7 +9,7 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 // Beta function calculation
 function betaFunction(a: number, b: number): number {
@@ -182,29 +182,38 @@ export default function BetaFunctionDemo() {
   return (
     <div className="space-y-6">
       {/* Collapsible explanation box */}
-      <details className="mt-6 rounded-lg border bg-card">
-        <summary className="cursor-pointer select-none p-4 font-medium">
-          What is the Beta distribution?
-        </summary>
-        <div className="px-4 pb-4 pt-0 text-sm leading-6">
-          <p>
-            We often use the beta distribution as a prior to estimate the
-            probability of a certain parameter. The a and b are parameters that
-            show a virtual count (a = positive examples and b = negative). The
-            higher the values, the more certain we are of a certain probability,
-            e.g. (1,1), (2,2) and (5,5) all have the same mean (0.5), but are
-            increasingly concentrated around the probability 0.5. More of a
-            certain type of count shifts the probability in that direction:
-            increasing a (= number of positive examples) brings the probability
-            mass closer to the probability 1. Intuition: more ‘positive
-            examples’ (<span className="font-mono">a</span> increase) shifts
-            mass to <span className="font-mono">θ = 1</span>; more “negative
-            examples” (increase <span className="font-mono">b</span>) shifts
-            mass to
-            <span className="font-mono"> θ = 0</span>.
-          </p>
-        </div>
-      </details>
+      <Card>
+        <details className="group">
+          <summary
+            className="flex items-center gap-2 cursor-pointer select-none p-4 font-medium
+                                list-none [&::-webkit-details-marker]:hidden"
+          >
+            <ChevronRight
+              className="h-4 w-4 transition-transform duration-200 group-open:rotate-90"
+              strokeWidth={1.2}
+            />
+            What is the Beta distribution?
+          </summary>
+          <div className="px-4 pb-4 pt-0 text-sm leading-6">
+            <p>
+              We often use the beta distribution as a prior to estimate the
+              probability of a certain parameter. The a and b are parameters
+              that show a virtual count (a = positive examples and b =
+              negative). The higher the values, the more certain we are of a
+              certain probability, e.g. (1,1), (2,2) and (5,5) all have the same
+              mean (0.5), but are increasingly concentrated around the
+              probability 0.5. More of a certain type of count shifts the
+              probability in that direction: increasing a (= number of positive
+              examples) brings the probability mass closer to the probability 1.
+              Intuition: more ‘positive examples’ (
+              <span className="font-mono">a</span> increase) shifts mass to{" "}
+              <span className="font-mono">θ = 1</span>; more “negative examples”
+              (increase <span className="font-mono">b</span>) shifts mass to
+              <span className="font-mono"> θ = 0</span>.
+            </p>
+          </div>
+        </details>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Controls */}

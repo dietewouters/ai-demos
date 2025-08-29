@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -20,7 +20,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltips";
-import { RotateCcw, StepForward, Maximize2, Settings } from "lucide-react";
+import {
+  RotateCcw,
+  StepForward,
+  Maximize2,
+  Settings,
+  ChevronRight,
+} from "lucide-react";
 
 import {
   type CSP,
@@ -365,7 +371,7 @@ function layoutTree(
   const levelGap = opts?.levelGap ?? 120;
   const siblingGap = opts?.siblingGap ?? 120;
   const margin = opts?.margin ?? 36;
-  const labelArea = opts?.labelArea ?? 100;
+  const labelArea = opts?.labelArea ?? 0;
 
   const nodes: Positioned[] = [];
   let nextX = 0;
@@ -461,9 +467,9 @@ function BacktrackingTreeSVG({
   const nodeColorState = (n: TreeNode, t: number) => {
     const accepted = n.acceptStep !== undefined && t >= n.acceptStep;
     const rejected = n.rejectStep !== undefined && t >= n.rejectStep;
-    if (rejected) return "rejected";
-    if (accepted) return "accepted";
-    return "testing";
+    if (rejected) return "rejected" as const;
+    if (accepted) return "accepted" as const;
+    return "testing" as const;
   };
 
   const visibleNodes = nodes.filter(
@@ -489,34 +495,6 @@ function BacktrackingTreeSVG({
       role="img"
       style={{ display: "block" }}
     >
-      {/* variable labels */}
-      {variables.map((v, i) => (
-        <g
-          key={v}
-          transform={`translate(${margin}, ${margin + (i + 1) * levelGap})`}
-        >
-          <rect
-            x={0}
-            y={-nodeH / 2}
-            width={labelArea - 12}
-            height={nodeH}
-            rx={8}
-            fill="none"
-            stroke={COLORS.labelStroke}
-            strokeWidth={1.5}
-          />
-          <text
-            x={(labelArea - 12) / 2}
-            y={4}
-            textAnchor="middle"
-            fontSize="12"
-            fill={COLORS.labelText}
-          >
-            {v}
-          </text>
-        </g>
-      ))}
-
       {/* edges */}
       {nodes
         .filter((p) => p.parentId && p.node.var)
@@ -573,6 +551,7 @@ function BacktrackingTreeSVG({
           return (
             <g
               key={p.id}
+              data-current={isCurrent ? "true" : undefined}
               transform={`translate(${p.x - nodeW / 2}, ${p.y - nodeH / 2})`}
             >
               <rect
@@ -629,6 +608,8 @@ export default function CSPVisualizer() {
   const [steps, setSteps] = useState<CSPStepWithSnapshot[]>([]);
   const [idx, setIdx] = useState<number>(-1);
   const [treeModalOpen, setTreeModalOpen] = useState(false);
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const previewRef = useRef<HTMLDivElement | null>(null);
 
   // zoom + scroll container for modal
   const [zoom, setZoom] = useState(1);
@@ -765,6 +746,60 @@ export default function CSPVisualizer() {
     });
   };
 
+  // Fit: past de hele tree in de zichtbare container
+  const handlePreviewFit = () => {
+    const cont = previewRef.current;
+    if (!cont) return;
+    const svg = cont.querySelector("svg");
+    if (!svg) return;
+
+    const vb = svg.getAttribute("viewBox");
+    if (!vb) return;
+    const parts = vb.trim().split(/\s+/).map(Number);
+    const vbW = parts[2],
+      vbH = parts[3];
+    if (!vbW || !vbH) return;
+
+    const scale =
+      Math.min(cont.clientWidth / vbW, cont.clientHeight / vbH) * 0.95;
+    const z = Math.max(0.5, Math.min(3, scale));
+    setPreviewZoom(z);
+
+    requestAnimationFrame(() => {
+      const contentW = vbW * z;
+      const contentH = vbH * z;
+      cont.scrollLeft = Math.max(0, (contentW - cont.clientWidth) / 2);
+      cont.scrollTop = Math.max(0, (contentH - cont.clientHeight) / 2);
+    });
+  };
+
+  // Focus: centreert naar de huidige node
+  const handlePreviewFocus = () => {
+    const cont = previewRef.current;
+    if (!cont) return;
+
+    const g = cont.querySelector(
+      'g[data-current="true"]'
+    ) as SVGGElement | null;
+    if (!g) return;
+
+    const transform = g.getAttribute("transform") || "";
+    const m = /translate\(([-0-9.]+),\s*([-0-9.]+)\)/.exec(transform);
+    if (!m) return;
+
+    const tx = parseFloat(m[1]);
+    const ty = parseFloat(m[2]);
+    const nodeW = 70;
+    const nodeH = 30;
+
+    // centreer naar het midden van het node-rect, rekening houdend met zoom
+    const cx = (tx + nodeW / 2) * previewZoom;
+    const cy = (ty + nodeH / 2) * previewZoom;
+
+    cont.scrollLeft = Math.max(0, cx - cont.clientWidth / 2);
+    cont.scrollTop = Math.max(0, cy - cont.clientHeight / 2);
+  };
+
   return (
     <TooltipProvider delayDuration={100}>
       <div className="mx-auto max-w-7xl px-4 md:px-6 pb-6 space-y-4 pt-0 md:pt-0">
@@ -787,6 +822,7 @@ export default function CSPVisualizer() {
           </div>
         </header>
 
+        {/* Main controls + views */}
         <Card className="p-4">
           <CardTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5" />
@@ -892,44 +928,6 @@ export default function CSPVisualizer() {
                 </Tooltip>
               </div>
 
-              {/* Backtracking tree ONLY when available */}
-              {treeAvailable && (
-                <Card className="p-3">
-                  <Accordion type="single" collapsible>
-                    <AccordionItem value="btree">
-                      <div className="flex items-center justify-between pr-1">
-                        <AccordionTrigger className="flex-1">
-                          Backtracking tree
-                        </AccordionTrigger>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setZoom(1);
-                            setTreeModalOpen(true);
-                          }}
-                          aria-label="Open large view"
-                        >
-                          <Maximize2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-
-                      <AccordionContent>
-                        <div className="h-64 md:h-80 overflow-auto">
-                          <BacktrackingTreeSVG
-                            root={btTree}
-                            variables={exercise.variables}
-                            currentStepIndex={idx}
-                            reveal="hide"
-                            zoom={1}
-                          />
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                </Card>
-              )}
-
               {/* Description / status */}
               <div className="whitespace-pre-wrap font-mono leading-5 text-sm">
                 {idx >= 0 && steps[idx] ? (
@@ -971,50 +969,184 @@ export default function CSPVisualizer() {
             </div>
           </div>
         </Card>
+
+        {/* Bottom-wide collapsible Backtracking Tree (initially closed) */}
+        {treeAvailable && (
+          <Card className="mt-8">
+            <details className="group">
+              <summary
+                className="flex items-center gap-2 cursor-pointer select-none p-4 font-medium
+                                list-none [&::-webkit-details-marker]:hidden"
+              >
+                <ChevronRight
+                  className="h-4 w-4 transition-transform duration-200 group-open:rotate-90"
+                  strokeWidth={1.2}
+                />
+                Backtracking Tree
+              </summary>
+              <CardContent>
+                <div className="p-3">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    {/* links: Step / Reset */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={handleStep}
+                        disabled={atEnd}
+                      >
+                        <StepForward className="h-4 w-4 mr-2" />
+                        Step
+                      </Button>
+                      <Button variant="ghost" onClick={handleReset}>
+                        <RotateCcw className="h-4 w-4 mr-2" />
+                        Reset
+                      </Button>
+                    </div>
+
+                    {/* rechts: + / - / Fit / Focus (ongewijzigd) */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          setPreviewZoom((z) =>
+                            Math.max(0.5, Math.min(3, z + 0.2))
+                          )
+                        }
+                      >
+                        +
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          setPreviewZoom((z) =>
+                            Math.max(0.5, Math.min(3, z - 0.2))
+                          )
+                        }
+                      >
+                        -
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const cont = previewRef.current;
+                          if (!cont) return;
+                          const svg = cont.querySelector("svg");
+                          if (!svg) return;
+                          const vb = svg.getAttribute("viewBox");
+                          if (!vb) return;
+                          const [, , vbW, vbH] = vb.split(/\s+/).map(Number);
+                          const scale =
+                            Math.min(
+                              cont.clientWidth / vbW,
+                              cont.clientHeight / vbH
+                            ) * 0.95;
+                          const z = Math.max(0.5, Math.min(3, scale));
+                          setPreviewZoom(z);
+                          requestAnimationFrame(() => {
+                            const contentW = vbW * z;
+                            const contentH = vbH * z;
+                            cont.scrollLeft = Math.max(
+                              0,
+                              (contentW - cont.clientWidth) / 2
+                            );
+                            cont.scrollTop = Math.max(
+                              0,
+                              (contentH - cont.clientHeight) / 2
+                            );
+                          });
+                        }}
+                      >
+                        Fit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const cont = previewRef.current;
+                          if (!cont) return;
+                          const current = cont.querySelector(
+                            'g[data-current="true"]'
+                          ) as any;
+                          if (current?.scrollIntoView) {
+                            current.scrollIntoView({
+                              block: "center",
+                              inline: "center",
+                              behavior: "smooth",
+                            });
+                          }
+                        }}
+                      >
+                        Focus
+                      </Button>
+                    </div>
+                  </div>
+                  <div
+                    ref={previewRef}
+                    className="min-h-[60vh] lg:min-h-[75vh] overflow-auto border rounded"
+                  >
+                    <BacktrackingTreeSVG
+                      root={btTree}
+                      variables={exercise.variables}
+                      currentStepIndex={Math.max(idx, 0)}
+                      reveal="hide"
+                      zoom={previewZoom}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </details>
+          </Card>
+        )}
       </div>
 
       {/* Large modal with Step/Reset + Zoom + drag-to-pan + wheel pan — ONLY when available */}
       {treeAvailable && (
         <Dialog open={treeModalOpen} onOpenChange={setTreeModalOpen}>
-          <DialogContent className="max-w-[95vw] w-[95vw] h-[85vh]">
+          <DialogContent className="max-w-none w-screen h-screen p-4 flex flex-col">
             <DialogHeader>
               <DialogTitle>Backtracking tree</DialogTitle>
             </DialogHeader>
 
-            <div className="flex items-center gap-2 mb-2">
-              <Button variant="outline" onClick={handleStep} disabled={atEnd}>
-                <StepForward className="h-4 w-4 mr-2" />
-                Step
-              </Button>
-              <Button variant="ghost" onClick={handleReset}>
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Reset
-              </Button>
-
-              <div className="ml-4 flex items-center gap-1">
-                <Button variant="outline" onClick={handleZoomOut}>
-                  –
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={handleStep} disabled={atEnd}>
+                  <StepForward className="h-4 w-4 mr-2" />
+                  Step
                 </Button>
-                <Button variant="outline" onClick={handleZoomIn}>
-                  +
-                </Button>
-                <Button variant="outline" onClick={handleZoomReset}>
-                  1:1
-                </Button>
-                <Button variant="outline" onClick={handleFit}>
-                  Fit
+                <Button variant="ghost" onClick={handleReset}>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reset
                 </Button>
               </div>
 
-              <span className="ml-auto text-sm text-muted-foreground">
-                Step {Math.max(0, idx + 1)} / {Math.max(0, steps.length)} · Zoom{" "}
-                {zoom.toFixed(2)}×
-              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setPreviewZoom((z) => Math.max(0.5, Math.min(3, z + 0.2)))
+                  }
+                >
+                  +
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setPreviewZoom((z) => Math.max(0.5, Math.min(3, z - 0.2)))
+                  }
+                >
+                  -
+                </Button>
+                <Button variant="outline" onClick={handlePreviewFit}>
+                  Fit
+                </Button>
+                <Button variant="outline" onClick={handlePreviewFocus}>
+                  Focus
+                </Button>
+              </div>
             </div>
 
             <div
               ref={scrollRef}
-              className="h-[calc(85vh-140px)] overflow-auto cursor-grab rounded border"
+              className="flex-1 overflow-auto cursor-grab rounded border"
               onMouseDown={onDragStart}
               onMouseMove={onDragMove}
               onMouseLeave={onDragEnd}
@@ -1024,9 +1156,9 @@ export default function CSPVisualizer() {
               <BacktrackingTreeSVG
                 root={btTree}
                 variables={exercise.variables}
-                currentStepIndex={idx}
+                currentStepIndex={Math.max(idx, 0)}
                 reveal="hide"
-                zoom={zoom}
+                zoom={previewZoom}
               />
             </div>
           </DialogContent>

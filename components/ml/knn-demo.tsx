@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Settings } from "lucide-react";
+import { ChevronRight, Settings } from "lucide-react";
 
 interface Point {
   x: number;
@@ -626,8 +626,15 @@ export default function KNNDemo() {
       {/* Calculations (details/summary) */}
       <Card className="lg:col-span-3">
         <CardContent>
-          <details>
-            <summary className="cursor-pointer select-none py-1 text-base font-medium">
+          <details className="group">
+            <summary
+              className="flex items-center gap-2 cursor-pointer select-none p-4 font-medium
+                                list-none [&::-webkit-details-marker]:hidden"
+            >
+              <ChevronRight
+                className="h-4 w-4 transition-transform duration-200 group-open:rotate-90"
+                strokeWidth={1.2}
+              />
               Distance Calculations
             </summary>
             <div className="mt-3">

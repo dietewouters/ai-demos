@@ -3,27 +3,42 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import * as React from "react";
+import { ChevronRight } from "lucide-react";
 
-/** ───────────────── Collapsible ───────────────── */
-function CollapsibleSection({
+type Props = {
+  title: React.ReactNode;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  className?: string;
+};
+
+export function CollapsibleSection({
   title,
+  isOpen,
+  onToggle,
   children,
-  defaultOpen = false,
-}: {
-  title: ReactNode;
-  children: ReactNode;
-  defaultOpen?: boolean;
-}) {
+  className,
+}: Props) {
   return (
-    <details
-      className="w-full rounded-xl border bg-white shadow-sm"
-      {...(defaultOpen ? { open: true } : {})}
-    >
-      <summary className="cursor-pointer select-none px-4 py-3 text-[15px] font-semibold leading-none">
-        {title}
-      </summary>
-      <div className="p-4 pt-0">{children}</div>
-    </details>
+    <Card className={className}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-2 p-4 text-left font-medium cursor-pointer select-none"
+        aria-expanded={isOpen}
+      >
+        <ChevronRight
+          className={`h-4 w-4 transition-transform duration-200 ${
+            isOpen ? "rotate-90" : ""
+          }`}
+          strokeWidth={1.2} // dun pijltje
+        />
+        <span>{title}</span>
+      </button>
+      {isOpen && <CardContent className="pt-0">{children}</CardContent>}
+    </Card>
   );
 }
 
@@ -2176,7 +2191,8 @@ export default function ExpectationMaximizationDemo() {
       </Badge>
     );
   };
-
+  const [qOpen, setQOpen] = React.useState(false);
+  const [mOpen, setMOpen] = React.useState(false);
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="flex gap-2 w-full">
@@ -2348,7 +2364,12 @@ export default function ExpectationMaximizationDemo() {
       </Card>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        <CollapsibleSection title="Q-functions (E-step)" defaultOpen={false}>
+        <CollapsibleSection
+          title="Q-functions (E-step)"
+          isOpen={qOpen}
+          onToggle={() => setQOpen((v) => !v)}
+          className="self-start"
+        >
           <QFunctionsPanel
             data={data}
             params={params}
@@ -2357,7 +2378,12 @@ export default function ExpectationMaximizationDemo() {
           />
         </CollapsibleSection>
 
-        <CollapsibleSection title="θ-updates (M-step)" defaultOpen={false}>
+        <CollapsibleSection
+          title="θ-updates (M-step)"
+          isOpen={mOpen}
+          onToggle={() => setMOpen((v) => !v)}
+          className="self-start"
+        >
           <MStepPanel
             currentStep={currentStep}
             params={params}
