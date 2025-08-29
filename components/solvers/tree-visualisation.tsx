@@ -8,8 +8,9 @@ interface TreeVisualizationProps {
   tree: DPLLTree;
   activeStepId?: string;
   onStepClick?: (stepId: string) => void;
-  /** Alleen nodes renderen met createdAt <= visibleEvent (progressive reveal) */
   visibleEvent?: number;
+  onPrevStep?: () => void;
+  onNextStep?: () => void;
 }
 
 /** Layout constants */
@@ -25,6 +26,31 @@ function isVisible(step: DPLLStep | undefined, cutoff: number): boolean {
   if (!step) return false;
   const created = step.createdAt ?? 0;
   return created <= cutoff;
+}
+function isSubtreeResolved(
+  tree: DPLLTree,
+  id: string,
+  cutoff: number
+): boolean {
+  const step = tree.steps.get(id);
+  if (!step) return false;
+
+  // Deze node zelf moet beslist zijn
+  const ownResolved = (step.resolvedAt ?? Number.POSITIVE_INFINITY) <= cutoff;
+  if (!ownResolved) return false;
+
+  // Alle zichtbare kinderen moeten ook beslist zijn (en hun subboom ook)
+  const kids = step.children ?? [];
+  for (const cid of kids) {
+    const child = tree.steps.get(cid);
+    if (!child) continue;
+
+    // Arc nog niet "echt getekend"? Dan is de split nog niet volledig onderzocht.
+    if (!isVisible(child, cutoff)) return false;
+
+    if (!isSubtreeResolved(tree, cid, cutoff)) return false;
+  }
+  return true;
 }
 
 function measureVisible(tree: DPLLTree, id: string, cutoff: number): number {
@@ -101,6 +127,8 @@ export function TreeVisualization({
   activeStepId,
   onStepClick,
   visibleEvent,
+  onPrevStep,
+  onNextStep,
 }: TreeVisualizationProps) {
   // Niets tonen tot visibleEvent verhoogd wordt
   const cutoff = visibleEvent ?? Number.NEGATIVE_INFINITY;
@@ -179,8 +207,9 @@ export function TreeVisualization({
       const step = tree.steps.get(id)!;
       const pp = p.get(id)!;
       const vkids = (step.children ?? []).filter((cid) => p.has(cid));
-      if (vkids.length >= 2) {
-        splits.push({ x: pp.x, y: pp.y + NODE_H / 2 + EDGE_STUB / 2 });
+      if (vkids.length === 2) {
+        const yJoint = pp.y + NODE_H / 2 + EDGE_STUB;
+        splits.push({ x: pp.x, y: yJoint - 12 });
       }
     }
 
@@ -317,12 +346,27 @@ export function TreeVisualization({
         >
           Fit
         </button>
-        <button
-          onClick={resetView}
-          className="px-2 py-1 rounded border bg-white text-xs"
-        >
-          Reset
-        </button>
+
+        <>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onPrevStep?.();
+            }}
+            className="px-2 py-1 rounded border bg-white text-xs"
+          >
+            Previous
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onNextStep?.();
+            }}
+            className="px-2 py-1 rounded border bg-white text-xs"
+          >
+            Next
+          </button>
+        </>
         {!fullscreen ? (
           <button
             onClick={() => setFullscreen(true)}
@@ -443,22 +487,14 @@ export function TreeVisualization({
 
           const decisionStamp = step.resolvedAt ?? step.createdAt ?? 0;
           const resolvedShown = cutoff >= decisionStamp;
-          const showModels = resolvedShown && step.modelCount !== undefined;
+          const subtreeResolved = isSubtreeResolved(tree, id, cutoff);
+          const showModels = subtreeResolved && step.modelCount !== undefined;
 
           const visualStep: DPLLStep = {
             ...step,
-            result: resolvedShown ? step.result : "UNKNOWN",
+            result: subtreeResolved ? step.result : "UNKNOWN",
             modelCount: showModels ? step.modelCount : undefined,
           };
-
-          const hasVisibleChildren = (step.children ?? []).some((cid) =>
-            pos.has(cid)
-          );
-          const showNodeSplitChip =
-            step.type === "split" &&
-            !hasVisibleChildren &&
-            step.id !== tree.rootId && // ⬅️ nooit bij de root
-            (step.variable !== undefined || (step.children?.length ?? 0) > 0);
 
           return (
             <div
@@ -470,15 +506,6 @@ export function TreeVisualization({
                 onStepClick?.(id);
               }}
             >
-              {/* Toon 'Split' alvast boven de node (geen root, nog geen zichtbare kinderen) */}
-              {showNodeSplitChip && (
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2">
-                  <span className="px-2 py-0.5 rounded border text-xs shadow-sm bg-blue-50 text-blue-700 border-blue-200">
-                    Split
-                  </span>
-                </div>
-              )}
-
               <TreeNode
                 step={visualStep}
                 isActive={isActive}

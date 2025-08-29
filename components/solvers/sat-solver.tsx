@@ -451,6 +451,8 @@ export function SATSolverDemo() {
                   if (i >= 0) setIdx(i);
                 }}
                 visibleEvent={visibleEvent}
+                onPrevStep={prev}
+                onNextStep={next}
               />
             </CardContent>
           </Card>
