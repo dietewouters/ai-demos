@@ -701,14 +701,23 @@ function ac3(
   const neighs = neighborsMap(csp);
   const prunedAll: Array<{ variable: string; value: string }> = [];
 
-  const enqueueArc = (i: string, j: string, reason?: string) => {
+  // enqueue met optie 'silent' om logging over te slaan
+  const enqueueArc = (
+    i: string,
+    j: string,
+    reason?: string,
+    opts?: { silent?: boolean }
+  ) => {
+    const silent = opts?.silent ?? false;
     const k = key(i, j);
     const already = inQueue.has(k);
+
     if (!already) {
       inQueue.add(k);
       queue.push([i, j]);
     }
-    if (stepThrough) {
+
+    if (stepThrough && !silent) {
       push({
         step: { kind: "ac3-enqueue", arc: [i, j] },
         snapshot: snapshotOf(csp, assignment, domains, undefined, [], queue),
@@ -727,11 +736,17 @@ function ac3(
   for (const c of csp.constraints) {
     if (c.scope.length === 2) {
       const [a, b] = c.scope;
-      enqueueArc(a, b);
-      enqueueArc(b, a);
+      enqueueArc(a, b, undefined, { silent: true });
+      enqueueArc(b, a, undefined, { silent: true });
     }
   }
-
+  if (stepThrough) {
+    push({
+      step: { kind: "ac3-start" } as any,
+      snapshot: snapshotOf(csp, assignment, domains, undefined, [], queue),
+      description: `AC-3 started — initial queue:\n${formatQueue(queue)}`,
+    });
+  }
   while (queue.length) {
     // Dequeue
     const [xi, xj] = queue.shift()!;

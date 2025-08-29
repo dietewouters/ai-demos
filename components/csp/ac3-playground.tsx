@@ -348,47 +348,58 @@ function runAC3Steps(
   const inQueue = new Set<string>();
   unaryFilterDomains(csp, assignment, domains, (s) => steps.push(s));
   // 1) Pas enqueueArc aan
-  const enqueueArc = (i: string, j: string, reason?: string) => {
+  // 1) Pas enqueueArc aan: support 'silent' om logs over te slaan
+  const enqueueArc = (
+    i: string,
+    j: string,
+    reason?: string,
+    opts?: { silent?: boolean }
+  ) => {
+    const silent = opts?.silent ?? false;
     const k = key(i, j);
     if (inQueue.has(k)) {
-      // al in queue: leg uit waarom we 'm (normaal) zouden toevoegen
+      // al in queue: normaal loggen, behalve als 'silent'
+      if (!silent) {
+        pushStep(
+          steps,
+          csp,
+          { kind: "ac3-enqueue", arc: [i, j] },
+          assignment,
+          domains,
+          `Enqueue ${opText(csp, i, j)} — already in queue` +
+            (reason ? ` (reason: ${reason})` : "") +
+            `\nQueue: ${formatQueue(queue)}`,
+          { edge: [i, j], constraintStatus: "enqueue" },
+          [],
+          queue
+        );
+      }
+      return;
+    }
+    inQueue.add(k);
+    queue.push([i, j]);
+    if (!silent) {
       pushStep(
         steps,
         csp,
         { kind: "ac3-enqueue", arc: [i, j] },
         assignment,
         domains,
-        `Enqueue ${opText(csp, i, j)} — already in queue` +
+        `Enqueue ${opText(csp, i, j)}` +
           (reason ? ` (reason: ${reason})` : "") +
           `\nQueue: ${formatQueue(queue)}`,
         { edge: [i, j], constraintStatus: "enqueue" },
         [],
         queue
       );
-      return;
     }
-    inQueue.add(k);
-    queue.push([i, j]);
-    pushStep(
-      steps,
-      csp,
-      { kind: "ac3-enqueue", arc: [i, j] },
-      assignment,
-      domains,
-      `Enqueue ${opText(csp, i, j)}` +
-        (reason ? ` (reason: ${reason})` : "") +
-        `\nQueue: ${formatQueue(queue)}`,
-      { edge: [i, j], constraintStatus: "enqueue" },
-      [],
-      queue
-    );
   };
 
   for (const c of csp.constraints) {
     if (c.scope.length === 2) {
       const [a, b] = c.scope;
-      enqueueArc(a, b, "");
-      enqueueArc(b, a, "");
+      enqueueArc(a, b, "", { silent: true });
+      enqueueArc(b, a, "", { silent: true });
     }
   }
 
@@ -398,7 +409,7 @@ function runAC3Steps(
     { kind: "ac3-start" },
     assignment,
     domains,
-    "AC-3 started",
+    `AC-3 started — initial queue:\n${formatQueue(queue)}`,
     undefined,
     [],
     queue
