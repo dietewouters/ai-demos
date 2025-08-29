@@ -644,7 +644,6 @@ export default function KNNDemo() {
                     <tr className="border-b">
                       <th className="text-left p-2">Point</th>
                       <th className="text-left p-2">Coordinates</th>
-                      <th className="text-left p-2">Class</th>
                       <th className="text-left p-2">Distance Calculation</th>
                       <th className="text-left p-2">Distance</th>
                       <th className="text-left p-2">Rank</th>
@@ -700,15 +699,7 @@ export default function KNNDemo() {
                           <td className="p-2">
                             ({point.x}, {point.y})
                           </td>
-                          <td className="p-2">
-                            <Badge
-                              variant={
-                                point.label === "blue" ? "default" : "secondary"
-                              }
-                            >
-                              {point.label}
-                            </Badge>
-                          </td>
+
                           <td className="p-2 font-mono text-xs">
                             {calculation}
                           </td>
