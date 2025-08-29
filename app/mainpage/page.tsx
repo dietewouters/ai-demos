@@ -91,6 +91,12 @@ export default function Home() {
           </ul>
         </div>
       </div>
+      <a
+        href="mailto:test@test.be?subject=Feedback%20on%20the%20demos"
+        className="inline-block mt-4 px-4 py-2 rounded-full bg-blue-600 text-white font-semibold shadow transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
+      >
+        Send feedback about the demos
+      </a>
     </section>
   );
 }
