@@ -179,7 +179,7 @@ function findAllPathsDetailed(
   end: string,
   visited: Set<string> = new Set(),
   currentPath: string[] = [],
-  maxDepth = 6
+  maxDepth = 20
 ): string[][] {
   if (currentPath.length > maxDepth) return [];
 
