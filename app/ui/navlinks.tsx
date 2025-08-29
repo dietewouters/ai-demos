@@ -96,6 +96,7 @@ const links: LinkItem[] = [
       },
     ],
   },
+  { name: "External Links", href: "/mainpage/externallinks" },
 ];
 
 // hulpfunctie: heeft dit item (recursief) een actieve descendant?
