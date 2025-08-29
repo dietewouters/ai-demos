@@ -43,10 +43,10 @@ export function CollapsibleSection({
 }
 
 /** ───────────────── Helpers ───────────────── */
-const EPS = 1e-9;
+const round3 = (x: number) => Math.round(x * 1000) / 1000;
 const changed = (a?: number, b?: number) =>
   typeof a === "number" && typeof b === "number"
-    ? Math.abs(a - b) > EPS
+    ? round3(a) !== round3(b)
     : false;
 
 function useFlashTick(tick: number, ms = 1900) {
@@ -492,8 +492,7 @@ function DataTable({
             const weightChanged =
               !isInitial &&
               (isFirstEStep || // eerste E-step: alles wat nu gewogen is, laten pulsen
-                (typeof prevW === "number" &&
-                  Math.abs(row.weight - prevW) > EPS));
+                (typeof prevW === "number" && changed(row.weight, prevW)));
 
             return (
               <tr key={idx} className="hover:bg-gray-50">
@@ -2176,7 +2175,8 @@ export default function ExpectationMaximizationDemo() {
     prev?: number;
     step: "ready" | "e-completed" | "m-completed";
   }) => {
-    const isChanged = typeof prev === "number" && Math.abs(value - prev) > 1e-9;
+    const isChanged = typeof prev === "number" && changed(value, prev);
+
     // Pulse θ’s alleen direct na M-step
     const shouldPulse = step === "m-completed" && flashM && isChanged;
 
@@ -2226,7 +2226,7 @@ export default function ExpectationMaximizationDemo() {
           }
         }
         .em-flash-weight {
-          animation: em-flash-weight 0.6s ease-in-out 3;
+          animation: em-flash-weight 0.6s ease-in-out 1;
           border-radius: 0.25rem;
         }
 
@@ -2242,7 +2242,7 @@ export default function ExpectationMaximizationDemo() {
           }
         }
         .em-flash-param {
-          animation: em-flash-param 0.6s ease-in-out 3;
+          animation: em-flash-param 0.6s ease-in-out 1;
           border-radius: 0.375rem;
         }
 
