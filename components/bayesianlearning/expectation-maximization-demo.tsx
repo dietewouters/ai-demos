@@ -2278,7 +2278,7 @@ export default function ExpectationMaximizationDemo() {
             </div>
             <div>
               <h3 className="font-semibold mb-4">
-                Current parameters (Iteratie {iteration})
+                Current parameters (Iteration {iteration})
               </h3>
               <div className="space-y-3 text-[15px]">
                 <div className="flex justify-between">
