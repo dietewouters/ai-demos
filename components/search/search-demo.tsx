@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { RotateCcw, Settings, ChevronRight } from "lucide-react";
 import { getAlgorithmById } from "./algorithms";
 import { graphs, defaultNodes } from "./app/graphs";
@@ -311,9 +312,9 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
 
   return (
     <div className="w-full max-w-6xl mx-auto p-6 space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-0">
         {/* Controls */}
-        <Card className="lg:col-span-1">
+        <Card className="lg:col-span-1 min-h-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Settings className="w-5 h-5" />
@@ -321,228 +322,251 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
             </CardTitle>
           </CardHeader>
 
-          {/* Scrollbar en next step op vaste plek */}
-          <CardContent className="p-4">
-            <div className="flex flex-col h-[calc(100vh-12rem)]">
-              <div className="flex-1 overflow-y-auto pr-1 space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Graph Type</label>
-                  <Select
-                    value={selectedGraph}
-                    onValueChange={setSelectedGraph}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(graphs).map(([key, graph]) => (
-                        <SelectItem key={key} value={key}>
-                          {graph.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-1">
+          {/* Scrollbare kolom mét sticky knoppen */}
+          <CardContent className="p-4 min-h-0">
+            {/* h = viewport minus wat marge voor header/padding; pas desnoods 12rem aan */}
+            <ScrollArea className="h-[calc(100dvh-12rem)]">
+              <div className="relative">
+                {/* Contentblok met extra bottom padding zodat het niet onder de sticky bar valt */}
+                <div className="space-y-4 pb-24">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Algorithm</label>
-                    <Select value={algorithmId} onValueChange={setAlgorithmId}>
+                    <label className="text-sm font-medium">Graph Type</label>
+                    <Select
+                      value={selectedGraph}
+                      onValueChange={setSelectedGraph}
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {algorithms.map((algorithm) => (
-                          <SelectItem key={algorithm.id} value={algorithm.id}>
-                            {algorithm.name}
+                        {Object.entries(graphs).map(([key, graph]) => (
+                          <SelectItem key={key} value={key}>
+                            {graph.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
 
-                {(algorithmId === "greedy" ||
-                  algorithmId === "dfs" ||
-                  algorithmId === "bfs" ||
-                  algorithmId === "id") && (
                   <div className="grid grid-cols-1">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Stopping</label>
+                      <label className="text-sm font-medium">Algorithm</label>
                       <Select
-                        value={stoppingCriterion}
-                        onValueChange={setStoppingCriterion}
+                        value={algorithmId}
+                        onValueChange={setAlgorithmId}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {stoppingOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
+                          {algorithms.map((algorithm) => (
+                            <SelectItem key={algorithm.id} value={algorithm.id}>
+                              {algorithm.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
-                )}
 
-                {(algorithmId === "greedy" ||
-                  algorithmId === "dfs" ||
-                  algorithmId === "bfs" ||
-                  algorithmId === "id") && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Loop Breaking</label>
-                    <Select
-                      value={loopBreaking}
-                      onValueChange={setLoopBreaking}
+                  {(algorithmId === "greedy" ||
+                    algorithmId === "dfs" ||
+                    algorithmId === "bfs" ||
+                    algorithmId === "id") && (
+                    <div className="grid grid-cols-1">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Stopping</label>
+                        <Select
+                          value={stoppingCriterion}
+                          onValueChange={setStoppingCriterion}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {stoppingOptions.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                              >
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+
+                  {(algorithmId === "greedy" ||
+                    algorithmId === "dfs" ||
+                    algorithmId === "bfs" ||
+                    algorithmId === "id") && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">
+                        Loop Breaking
+                      </label>
+                      <Select
+                        value={loopBreaking}
+                        onValueChange={setLoopBreaking}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {loopBreakingOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedLoopBreakingOption?.description}
+                      </p>
+                    </div>
+                  )}
+
+                  {algorithmId === "beam" && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Beam Width</label>
+                      <Select
+                        value={beamWidth.toString()}
+                        onValueChange={(v) => setBeamWidth(Number(v))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3].map((w) => (
+                            <SelectItem key={w} value={w.toString()}>
+                              {w}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Start</label>
+                      <Select value={startNode} onValueChange={setStartNode}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {currentGraph.nodes.map((n) => (
+                            <SelectItem key={n.id} value={n.id}>
+                              {n.id}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Goal</label>
+                      <Select value={goalNode} onValueChange={setGoalNode}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {currentGraph.nodes.map((n) => (
+                            <SelectItem key={n.id} value={n.id}>
+                              {n.id}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 justify-start">
+                    <Button
+                      onClick={nextStep}
+                      disabled={!canTakeNextStep}
+                      size="sm"
+                      className="px-3 whitespace-nowrap w-auto"
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {loopBreakingOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {selectedLoopBreakingOption?.description}
-                    </p>
-                  </div>
-                )}
+                      <ChevronRight className="w-3 h-3 mr-1" />
+                      Next Step
+                    </Button>
 
-                {algorithmId === "beam" && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Beam Width</label>
-                    <Select
-                      value={beamWidth.toString()}
-                      onValueChange={(v) => setBeamWidth(Number(v))}
+                    <Button
+                      onClick={resetSearch}
+                      variant="outline"
+                      size="icon"
+                      className="shrink-0"
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[1, 2, 3].map((w) => (
-                          <SelectItem key={w} value={w.toString()}>
-                            {w}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <RotateCcw className="w-4 h-4" />
+                    </Button>
                   </div>
-                )}
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Start</label>
-                    <Select value={startNode} onValueChange={setStartNode}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {currentGraph.nodes.map((n) => (
-                          <SelectItem key={n.id} value={n.id}>
-                            {n.id}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Goal</label>
-                    <Select value={goalNode} onValueChange={setGoalNode}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {currentGraph.nodes.map((n) => (
-                          <SelectItem key={n.id} value={n.id}>
-                            {n.id}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  {/* Current Step Info */}
+                  <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                    <div className="text-sm text-gray-600 mb-2 min-h-[24px]">
+                      {currentStep?.description ?? "\u00A0"}
+                    </div>
+                    <div className="mt-3">
+                      <div className="text-xs font-medium text-gray-700 mb-1">
+                        Path Queue ({algorithmId.toUpperCase()}):
+                      </div>
+                      <div className="text-xs text-gray-600 space-y-1 max-h-24 min-h-24 overflow-y-auto pr-1">
+                        {currentStep?.pathQueue?.length ? (
+                          currentStep.pathQueue.map((path, index) => {
+                            const tag = formatQueueTag(path);
+                            return (
+                              <div
+                                key={index}
+                                className="bg-white px-2 py-1 rounded border"
+                              >
+                                {path.join(" → ")}
+                                {tag && (
+                                  <span className="ml-1 text-[11px] text-gray-500">
+                                    ({tag})
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="text-gray-400 italic">Empty</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {algorithmId === "idastar" && (
+                      <div className="text-xs text-gray-500 mt-2 min-h-[16px]">
+                        {currentStep?.bound !== undefined && (
+                          <>f-bound: {currentStep.bound}</>
+                        )}
+                        {currentStep?.fNew !== undefined && (
+                          <>
+                            {" "}
+                            {currentStep?.bound !== undefined &&
+                              "|"} f-new:{" "}
+                            {currentStep.fNew === Infinity
+                              ? "∞"
+                              : currentStep.fNew}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Current Step Info */}
-                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                  <div className="text-sm text-gray-600 mb-2 min-h-[24px]">
-                    {currentStep?.description ?? "\u00A0"}
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-xs font-medium text-gray-700 mb-1">
-                      Path Queue ({algorithmId.toUpperCase()}):
-                    </div>
-                    <div className="text-xs text-gray-600 space-y-1 max-h-24 min-h-24 overflow-y-auto pr-1">
-                      {currentStep?.pathQueue?.length ? (
-                        currentStep.pathQueue.map((path, index) => {
-                          const tag = formatQueueTag(path);
-                          return (
-                            <div
-                              key={index}
-                              className="bg-white px-2 py-1 rounded border"
-                            >
-                              {path.join(" → ")}
-                              {tag && (
-                                <span className="ml-1 text-[11px] text-gray-500">
-                                  ({tag})
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="text-gray-400 italic">Empty</div>
-                      )}
-                    </div>
-                  </div>
-
-                  {algorithmId === "idastar" && (
-                    <div className="text-xs text-gray-500 mt-2 min-h-[16px]">
-                      {currentStep?.bound !== undefined && (
-                        <>f-bound: {currentStep.bound}</>
-                      )}
-                      {currentStep?.fNew !== undefined && (
-                        <>
-                          {" "}
-                          {currentStep?.bound !== undefined && "|"} f-new:{" "}
-                          {currentStep.fNew === Infinity
-                            ? "∞"
-                            : currentStep.fNew}
-                        </>
-                      )}
+                {/* Sticky knoppen binnen dezelfde scroller */}
+                <div className="sticky bottom-0 bg-white/90 backdrop-blur border-t pt-2 -mx-1 px-1">
+                  {searchState.isComplete && (
+                    <div className="text-green-600 font-medium text-center mt-2">
+                      Goal Found!
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Knoppen*/}
-              <div className="sticky bottom-0 bg-white/90 backdrop-blur border-t pt-2 mt-2">
-                <div className="flex gap-2">
-                  <Button
-                    onClick={nextStep}
-                    disabled={!canTakeNextStep}
-                    className="flex-1"
-                  >
-                    <ChevronRight className="w-4 h-4 mr-1" />
-                    Next Step
-                  </Button>
-                  <Button onClick={resetSearch} variant="outline">
-                    <RotateCcw className="w-4 h-4" />
-                  </Button>
-                </div>
-                {searchState.isComplete && (
-                  <div className="text-green-600 font-medium text-center mt-2">
-                    Goal Found!
-                  </div>
-                )}
-              </div>
-            </div>
+              {/* Forceer zichtbare scrollbar, ook bij overlay OS scrollbars */}
+              <ScrollBar orientation="vertical" />
+            </ScrollArea>
           </CardContent>
         </Card>
 
@@ -650,7 +674,6 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                 })}
               </svg>
             </div>
-
             <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -665,11 +688,15 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                   <div className="w-4 h-4 bg-orange-400 rounded-full"></div>
                   <span>Currently Processing</span>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-yellow-300 rounded-full"></div>
-                    <span>In Frontier</span>
-                  </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-yellow-300 rounded-full"></div>
+                  <span>In Frontier</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-blue-400 rounded-full"></div>
+                  <span>Already Processed</span>
                 </div>
               </div>
             </div>

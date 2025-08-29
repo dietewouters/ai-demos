@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { RotateCcw, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import type { JSX } from "react/jsx-runtime";
+import { M_PLUS_1 } from "next/font/google";
 
 /**
  * Matches the interaction model of your DPLL visualization:
@@ -276,6 +277,222 @@ const EXAMPLE_TREES = {
       ],
     },
   },
+  difforder: {
+    name: "Best case",
+    tree: {
+      id: "root",
+      level: 0,
+      isMax: true,
+      x: 0,
+      y: 0,
+      children: [
+        {
+          id: "a",
+          level: 1,
+          isMax: false,
+          x: 0,
+          y: 0,
+          children: [
+            {
+              id: "a1",
+              level: 2,
+              isMax: true,
+              x: 0,
+              y: 0,
+              children: [
+                {
+                  id: "a11",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [
+                    { id: "a111", value: 2, level: 4, x: 0, y: 0 },
+                    { id: "a112", value: 3, level: 4, x: 0, y: 0 },
+                    { id: "a113", value: 4, level: 4, x: 0, y: 0 },
+                  ],
+                },
+              ],
+            },
+            {
+              id: "a2",
+              level: 2,
+              isMax: true,
+              x: 0,
+              y: 0,
+              children: [
+                {
+                  id: "a21",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [
+                    { id: "a211", value: 3, level: 4, x: 0, y: 0 },
+                    { id: "a212", value: 4, level: 4, x: 0, y: 0 },
+                    { id: "a213", value: 5, level: 4, x: 0, y: 0 },
+                  ],
+                },
+                {
+                  id: "a22",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [
+                    { id: "a221", value: 1, level: 4, x: 0, y: 0 },
+                    { id: "a222", value: 2, level: 4, x: 0, y: 0 },
+                  ],
+                },
+              ],
+            },
+            {
+              id: "a3",
+              level: 2,
+              isMax: true,
+              x: 0,
+              y: 0,
+              children: [
+                {
+                  id: "a31",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [{ id: "a311", value: 7, level: 4, x: 0, y: 0 }],
+                },
+                {
+                  id: "a32",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [
+                    { id: "a321", value: 4, level: 4, x: 0, y: 0 },
+                    { id: "a322", value: 5, level: 4, x: 0, y: 0 },
+                  ],
+                },
+                {
+                  id: "a33",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [
+                    { id: "a331", value: 2, level: 4, x: 0, y: 0 },
+                    { id: "a332", value: 3, level: 4, x: 0, y: 0 },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "b",
+          level: 1,
+          isMax: false,
+          x: 0,
+          y: 0,
+          children: [
+            {
+              id: "b1",
+              level: 2,
+              isMax: true,
+              x: 0,
+              y: 0,
+              children: [
+                {
+                  id: "b11",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [
+                    { id: "b111", value: 0, level: 4, x: 0, y: 0 },
+                    { id: "b112", value: 1, level: 4, x: 0, y: 0 },
+                    { id: "b113", value: 4, level: 4, x: 0, y: 0 },
+                  ],
+                },
+              ],
+            },
+            {
+              id: "b2",
+              level: 2,
+              isMax: true,
+              x: 0,
+              y: 0,
+              children: [
+                {
+                  id: "b21",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [
+                    { id: "b211", value: 3, level: 4, x: 0, y: 0 },
+                    { id: "b212", value: 5, level: 4, x: 0, y: 0 },
+                  ],
+                },
+                {
+                  id: "b22",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [{ id: "b221", value: 0, level: 4, x: 0, y: 0 }],
+                },
+              ],
+            },
+            {
+              id: "b3",
+              level: 2,
+              isMax: true,
+              x: 0,
+              y: 0,
+              children: [
+                {
+                  id: "b31",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [
+                    { id: "b311", value: 3, level: 4, x: 0, y: 0 },
+                    { id: "b312", value: 6, level: 4, x: 0, y: 0 },
+                  ],
+                },
+                {
+                  id: "b32",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [
+                    { id: "b321", value: 2, level: 4, x: 0, y: 0 },
+                    { id: "b322", value: 4, level: 4, x: 0, y: 0 },
+                    { id: "b323", value: 7, level: 4, x: 0, y: 0 },
+                  ],
+                },
+                {
+                  id: "b33",
+                  level: 3,
+                  isMax: false,
+                  x: 0,
+                  y: 0,
+                  children: [
+                    { id: "b331", value: 1, level: 4, x: 0, y: 0 },
+                    { id: "b332", value: 3, level: 4, x: 0, y: 0 },
+                    { id: "b333", value: 5, level: 4, x: 0, y: 0 },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   extra1: {
     name: "Extra exercise 1",
     tree: {
@@ -1019,7 +1236,6 @@ export default function MinimaxDemo() {
 
           // === CUTOFF? ===
           if (useAlphaBeta && b <= a) {
-            // pijltje laten zien: parent(node.id) α (a) ≤ child(child.id) β (b)
             steps.push({
               nodeId: node.id,
               action: "cut",
@@ -1029,7 +1245,6 @@ export default function MinimaxDemo() {
               explanation: "",
             });
 
-            // markeer resterende kinderen als gepruned
             for (let j = i + 1; j < (node.children?.length ?? 0); j++) {
               steps.push({
                 nodeId: node.children![j].id,
@@ -1469,13 +1684,13 @@ export default function MinimaxDemo() {
         ? "bg-red-50 border-red-500 text-red-700"
         : "bg-green-50 border-green-600 text-green-700") +
       " px-1.5 py-0.5 rounded-sm border text-[17px] font-semibold shadow-sm";
-
+    const isActive = node.id === currentNodeId;
     const nodeClass = `
       absolute rounded-full border-2 flex items-center justify-center text-sm font-semibold transition-all duration-300
       ${
         node.visited ? "border-gray-400 bg-white" : "border-gray-300 bg-gray-50"
       }
-      ${node.currentlyEvaluating ? "ring-4 ring-orange-300 bg-orange-50" : ""}
+      ${isActive ? "ring-4 ring-orange-300 bg-orange-50" : ""}
       ${node.pruned ? "border-red-400 bg-red-50 opacity-60" : ""}
       ${faded ? "opacity-30" : ""}
     `;

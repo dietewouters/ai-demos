@@ -26,7 +26,10 @@ export default function SideNav() {
 
       <a
         href="mailto:rik.adriaensen@kuleuven.be,lucas.vanpraet@kuleuven.be?subject=Feedback%20on%20the%20demos"
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 text-center inline-block px-4 py-2 rounded-full bg-blue-500 text-white font-semibold shadow transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600 text-[14px]"
+        className="block mx-auto w-34 rounded-full border border-slate-300
+                   bg-white/70 backdrop-blur px-4 py-2 text-sm font-medium text-slate-700
+                   shadow-sm hover:bg-white hover:shadow-md
+                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-600"
       >
         Send feedback
       </a>
