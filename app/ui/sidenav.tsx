@@ -11,7 +11,7 @@ export default function SideNav() {
     >
       {/* Logo / titel */}
       <Link
-        href="/mainpage"
+        href="/"
         className="flex h-16 items-center justify-start px-4 bg-blue-600"
       >
         <span className="text-lg font-bold tracking-wide text-white">

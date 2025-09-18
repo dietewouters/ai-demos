@@ -19,84 +19,84 @@ type LinkItem = {
 const links: LinkItem[] = [
   {
     name: "Search",
-    // href: "/mainpage/search",   // <- weglaten zodat dit GEEN tab is
+    // href: "/search",   // <- weglaten zodat dit GEEN tab is
     children: [
-      { name: "Search", href: "/mainpage/search/session1" },
-      { name: "Advanced Search", href: "/mainpage/search/session2" },
-      { name: "Minimax", href: "/mainpage/search/minimax" },
+      { name: "Search", href: "/search/session1" },
+      { name: "Advanced Search", href: "/search/session2" },
+      { name: "Minimax", href: "/search/minimax" },
     ],
   },
   {
     name: "CSP",
-    // href: "/mainpage/csp",
+    // href: "/csp",
     children: [
-      { name: "Backtracking", href: "/mainpage/csp/general" },
-      { name: "Forward checking", href: "/mainpage/csp/fc" },
-      { name: "AC-3", href: "/mainpage/csp/ac-3" },
+      { name: "Backtracking", href: "/csp/general" },
+      { name: "Forward checking", href: "/csp/fc" },
+      { name: "AC-3", href: "/csp/ac-3" },
     ],
   },
   {
     name: "First Order Logic",
-    // href: "/mainpage/firstorderlogic",
+    // href: "/firstorderlogic",
     children: [
       {
         name: "Most General Unifier",
-        href: "/mainpage/firstorderlogic/unification",
+        href: "/firstorderlogic/unification",
       },
       {
         name: "Implicative Normal Form",
-        href: "/mainpage/firstorderlogic/implicative",
+        href: "/firstorderlogic/implicative",
       },
     ],
   },
   {
     name: "LLMs",
-    // href: "/mainpage/llms",
-    children: [{ name: "N-grams", href: "/mainpage/llms/general" }],
+    // href: "/llms",
+    children: [{ name: "N-grams", href: "/llms/general" }],
   },
   {
     name: "Bayesian Nets",
-    // href: "/mainpage/bayesiannets",
+    // href: "/bayesiannets",
     children: [
-      { name: "Probabilities", href: "/mainpage/bayesiannets/general" },
-      { name: "Construction", href: "/mainpage/bayesiannets/construction" },
-      { name: "Markov Blanket", href: "/mainpage/bayesiannets/markovblanket" },
-      { name: "Independence", href: "/mainpage/bayesiannets/dsep" },
+      { name: "Probabilities", href: "/bayesiannets/general" },
+      { name: "Construction", href: "/bayesiannets/construction" },
+      { name: "Markov Blanket", href: "/bayesiannets/markovblanket" },
+      { name: "Independence", href: "/bayesiannets/dsep" },
     ],
   },
   {
     name: "Solvers",
-    // href: "/mainpage/solvers",
+    // href: "/solvers",
     children: [
-      { name: "SAT", href: "/mainpage/solvers/general" },
-      { name: "WMC", href: "/mainpage/solvers/wmc" },
+      { name: "SAT", href: "/solvers/general" },
+      { name: "WMC", href: "/solvers/wmc" },
     ],
   },
   {
     name: "ML",
-    // href: "/mainpage/ml",
+    // href: "/ml",
     children: [
-      { name: "K-Nearest Neighbours", href: "/mainpage/ml/knearestneighbours" },
-      { name: "Naïve Bayes", href: "/mainpage/ml/naivebayes" },
-      { name: "Neural Networks", href: "/mainpage/ml/neuralnet" },
+      { name: "K-Nearest Neighbours", href: "/ml/knearestneighbours" },
+      { name: "Naïve Bayes", href: "/ml/naivebayes" },
+      { name: "Neural Networks", href: "/ml/neuralnet" },
     ],
   },
   {
     name: "Bayesian Learning",
-    // href: "/mainpage/bayesianlearning",
+    // href: "/bayesianlearning",
     children: [
       {
         name: "Beta-Function",
-        href: "/mainpage/bayesianlearning/beta-function",
+        href: "/bayesianlearning/beta-function",
       },
-      { name: "HMM", href: "/mainpage/bayesianlearning/hmm" },
+      { name: "HMM", href: "/bayesianlearning/hmm" },
       {
         name: "Expectation Maximization",
-        href: "/mainpage/bayesianlearning/expmax",
+        href: "/bayesianlearning/expmax",
       },
     ],
   },
-  { name: "External Links", href: "/mainpage/externallinks" },
+  { name: "External Links", href: "/externallinks" },
 ];
 
 // hulpfunctie: heeft dit item (recursief) een actieve descendant?
