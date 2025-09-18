@@ -1041,7 +1041,6 @@ type CameraPref = "auto" | "focus" | "full";
 export default function MinimaxDemo() {
   const [selectedTree, setSelectedTree] =
     useState<keyof typeof EXAMPLE_TREES>("provided");
-  const [tree, setTree] = useState<TreeNode>(EXAMPLE_TREES.provided.tree);
   const [alphaBetaPruning, setAlphaBetaPruning] = useState(true);
   const [currentStep, setCurrentStep] = useState(0);
   const [steps, setSteps] = useState<AlgorithmStep[]>([]);
@@ -1402,7 +1401,6 @@ export default function MinimaxDemo() {
       children: n.children?.map(resetNode),
     });
     const laid = layoutTree(EXAMPLE_TREES[selectedTree].tree);
-    setTree(resetNode(laid));
     setCurrentStep(0);
     setFollowSteps(true);
     setSteps(generateSteps(EXAMPLE_TREES[selectedTree].tree, alphaBetaPruning));
