@@ -38,7 +38,7 @@ interface TreeNode {
   value?: number;
   children?: TreeNode[];
   level: number;
-  isMax: boolean;
+  isMax?: boolean;
   x: number;
   y: number;
   alpha?: number;
@@ -61,7 +61,12 @@ interface AlgorithmStep {
   childId?: string;
 }
 
-const EXAMPLE_TREES = {
+interface TreeExample {
+  name: string;
+  tree: TreeNode;
+}
+
+const EXAMPLE_TREES : { provided: TreeExample, difforder: TreeExample, extra1: TreeExample, extra2: TreeExample} = {
   provided: {
     name: "Exercise from exercise session",
     tree: {
