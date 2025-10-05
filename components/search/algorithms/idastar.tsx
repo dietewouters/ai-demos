@@ -174,6 +174,21 @@ export const IDAStar: Algorithm = {
   id: "idastar",
   name: "IDA* Search",
   description: "Iterative Deepening A* Search",
-  execute: (adjList, start, goal, earlyStop, loopBreaking, graphId = "tree") =>
-    executeIDAStar(adjList, start, goal, earlyStop, loopBreaking, graphId),
+  execute: (
+    adjList,
+    start,
+    goal,
+    earlyStop,
+    usePathLoopBreaking,
+    useClosedSet,
+    graphId = "tree"
+  ) =>
+    executeIDAStar(
+      adjList,
+      start,
+      goal,
+      earlyStop,
+      usePathLoopBreaking,
+      graphId
+    ),
 };

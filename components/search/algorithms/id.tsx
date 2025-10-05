@@ -1,8 +1,11 @@
 "use client";
+
 import type { SearchStep } from "../app/search";
 import type { Algorithm } from "../algorithms/types";
 
-// Helpers to support directional ordering on grid ids: "x_y"
+/**
+ * Helpers to support directional ordering on grid ids: "x_y"
+ */
 const parseCoords = (id: string): [number, number] | null => {
   const parts = id.split("_");
   if (parts.length !== 2) return null;
@@ -15,18 +18,19 @@ const parseCoords = (id: string): [number, number] | null => {
 const sortByDirection = (current: string, neighbors: string[]) => {
   const cur = parseCoords(current);
   if (!cur) return [...neighbors].sort(); // fallback for non-grid ids
+
   const [cx, cy] = cur;
 
+  // Up, Right, Left, Down priority on same row/col; everything else after
   const dirScore = (id: string) => {
     const c = parseCoords(id);
-    if (!c) return 99; // non-grid → last
+    if (!c) return 99; // non-grid → last (but stable)
     const [x, y] = c;
-    // Up, Right, Left, Down (only 4-neighborhood on same row/col)
     if (y < cy && x === cx) return 0; // up
     if (x > cx && y === cy) return 1; // right
     if (x < cx && y === cy) return 2; // left
     if (y > cy && x === cx) return 3; // down
-    return 4; // anything else (e.g. diagonals) after the four main dirs
+    return 4; // diagonals / others
   };
 
   return [...neighbors].sort((a, b) => dirScore(a) - dirScore(b));
@@ -41,8 +45,8 @@ function executeIterativeDeepening(
 ): SearchStep[] {
   const steps: SearchStep[] = [];
   let stepCounter = 0;
-  const MAX_STEPS = 1000;
-  const MAX_DEPTH = 50;
+  const MAX_STEPS = 5000;
+  const MAX_DEPTH = 100;
 
   steps.push({
     stepType: "start",
@@ -51,29 +55,27 @@ function executeIterativeDeepening(
     frontier: [startNode],
     parent: {},
     pathQueue: [[startNode]],
-    description: ``,
+    description: `Start Iterative Deepening from ${startNode}. Goal: ${goalNode}.`,
   });
 
   function depthLimitedSearch(
     currentDepthLimit: number
   ): "found" | "cutoff" | "failure" {
     let cutoffOccurred = false;
+
     let activePaths: string[][] = [[startNode]];
 
     while (activePaths.length > 0 && stepCounter < MAX_STEPS) {
       stepCounter++;
 
-      // Stack behavior (DFS within the depth limit)
       const currentPath = activePaths.pop()!;
       const currentNode = currentPath[currentPath.length - 1];
       const currentDepth = currentPath.length - 1;
 
-      // Build visited set from current path (for loop breaking)
       const visited = loopBreaking
         ? new Set<string>(currentPath)
         : new Set<string>();
 
-      // Remaining frontier nodes = last node of each remaining path
       const frontierNodes = activePaths.map((path) => path[path.length - 1]);
 
       steps.push({
@@ -88,12 +90,11 @@ function executeIterativeDeepening(
           currentPath.length > 1
             ? { from: currentPath[currentPath.length - 2], to: currentNode }
             : undefined,
-        description: `Taking path from queue: ${currentPath.join(
+        description: `Taking path from stack: ${currentPath.join(
           " → "
         )} (depth ${currentDepth}/${currentDepthLimit})`,
       });
 
-      // Goal test
       if (currentNode === goalNode) {
         steps.push({
           stepType: "goal_found",
@@ -110,7 +111,6 @@ function executeIterativeDeepening(
         return "found";
       }
 
-      // Depth cutoff
       if (currentDepth >= currentDepthLimit) {
         steps.push({
           stepType: "add_to_frontier",
@@ -120,13 +120,12 @@ function executeIterativeDeepening(
           parent: {},
           pathQueue: [...activePaths],
           addedNodes: [],
-          description: `Depth limit ${currentDepthLimit} reached at ${currentNode}`,
+          description: `Depth limit ${currentDepthLimit} reached at ${currentNode}.`,
         });
         cutoffOccurred = true;
         continue;
       }
 
-      // --- Directional neighbor order (Up → Right → Left → Down) with fallback ---
       const neighborsOrdered = sortByDirection(
         currentNode,
         adjList[currentNode] || []
@@ -145,16 +144,14 @@ function executeIterativeDeepening(
         })),
         description: `Exploring neighbors of ${currentNode}: ${neighborsOrdered.join(
           ", "
-        )} at depth ${currentDepth}`,
+        )} (depth ${currentDepth}).`,
       });
 
-      // Filter valid neighbors
       const validNeighbors = loopBreaking
-        ? neighborsOrdered.filter((neighbor) => !currentPath.includes(neighbor))
+        ? neighborsOrdered.filter((n) => !currentPath.includes(n))
         : neighborsOrdered;
 
       if (validNeighbors.length > 0) {
-        // Early stopping if goal is among next neighbors
         if (earlyStop && validNeighbors.includes(goalNode)) {
           const goalPath = [...currentPath, goalNode];
 
@@ -177,22 +174,20 @@ function executeIterativeDeepening(
             parent: {},
             pathQueue: [goalPath],
             finalPath: goalPath,
-            description: `Goal ${goalNode} found in neighbors! Path: ${goalPath.join(
+            description: `Goal ${goalNode} found among neighbors. Path: ${goalPath.join(
               " → "
             )}`,
           });
+
           return "found";
         }
 
-        // Push in reverse so pop() follows Up → Right → Left → Down
         const newPaths = [...validNeighbors]
           .reverse()
-          .map((neighbor) => [...currentPath, neighbor]);
+          .map((n) => [...currentPath, n]);
         activePaths.push(...newPaths);
 
-        const updatedFrontierNodes = activePaths.map(
-          (path) => path[path.length - 1]
-        );
+        const updatedFrontierNodes = activePaths.map((p) => p[p.length - 1]);
 
         steps.push({
           stepType: "add_to_frontier",
@@ -202,10 +197,8 @@ function executeIterativeDeepening(
           parent: {},
           pathQueue: [...activePaths],
           addedNodes: validNeighbors,
-          description: `Adding ${
-            newPaths.length
-          } new paths to queue:\n${newPaths
-            .map((path) => path.join(" → "))
+          description: `Adding ${newPaths.length} new path(s):\n${newPaths
+            .map((p) => p.join(" → "))
             .join("\n")}`,
         });
       } else {
@@ -219,9 +212,9 @@ function executeIterativeDeepening(
           addedNodes: [],
           description: `No valid neighbors from ${currentNode} ${
             loopBreaking
-              ? "(would create cycle)"
+              ? "(would create a cycle in current path)"
               : "(would backtrack immediately)"
-          }`,
+          }.`,
         });
       }
     }
@@ -229,10 +222,10 @@ function executeIterativeDeepening(
     return cutoffOccurred ? "cutoff" : "failure";
   }
 
-  // Main iterative deepening loop
+  let found = false;
   for (
     let depthLimit = 0;
-    depthLimit <= MAX_DEPTH && stepCounter < MAX_STEPS;
+    depthLimit <= MAX_DEPTH && stepCounter < MAX_STEPS && !found;
     depthLimit++
   ) {
     steps.push({
@@ -242,13 +235,13 @@ function executeIterativeDeepening(
       frontier: [startNode],
       parent: {},
       pathQueue: [[startNode]],
-      description: `Starting depth-limited search with limit ${depthLimit}`,
+      description: `Starting depth-limited search with limit ${depthLimit}.`,
     });
 
     const result = depthLimitedSearch(depthLimit);
 
     if (result === "found") {
-      break;
+      found = true;
     } else if (result === "failure") {
       steps.push({
         stepType: "add_to_frontier",
@@ -258,7 +251,7 @@ function executeIterativeDeepening(
         parent: {},
         pathQueue: [],
         addedNodes: [],
-        description: `No solution exists at depth ${depthLimit} - need to increase limit`,
+        description: `No solution within depth ${depthLimit}.`,
       });
     } else if (result === "cutoff") {
       steps.push({
@@ -269,14 +262,14 @@ function executeIterativeDeepening(
         parent: {},
         pathQueue: [],
         addedNodes: [],
-        description: `Depth limit ${depthLimit} reached - increasing to ${
+        description: `Depth limit ${depthLimit} caused cutoff — increasing to ${
           depthLimit + 1
-        }`,
+        }.`,
       });
     }
   }
 
-  if (stepCounter >= MAX_STEPS) {
+  if (!found) {
     steps.push({
       stepType: "add_to_frontier",
       currentNode: "",
@@ -285,7 +278,19 @@ function executeIterativeDeepening(
       parent: {},
       pathQueue: [],
       addedNodes: [],
-      description: `Search stopped after ${MAX_STEPS} steps to prevent timeout`,
+      description: `No path to goal found up to depth ${MAX_DEPTH}.`,
+    });
+  }
+
+  if (stepCounter >= MAX_STEPS) {
+    steps.push({
+      stepType: "error",
+      currentNode: "",
+      visited: new Set<string>(),
+      frontier: [],
+      parent: {},
+      pathQueue: [],
+      description: `Search stopped after ${MAX_STEPS} steps to prevent timeout.`,
     });
   }
 
@@ -295,6 +300,6 @@ function executeIterativeDeepening(
 export const IDD: Algorithm = {
   id: "id",
   name: "Iterative Deepening",
-  description: "",
+  description: "Depth-limited DFS with increasing limit (IDDFS).",
   execute: executeIterativeDeepening,
 };

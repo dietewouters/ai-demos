@@ -197,6 +197,14 @@ export const UCS: Algorithm = {
   id: "ucs",
   name: "Uniform Cost Search",
   description: "Expands the node with the lowest cumulative path cost.",
-  execute: (adjList, start, goal, earlyStop, loopBreaking, graphId = "tree") =>
-    executeUCS(adjList, start, goal, earlyStop, loopBreaking, graphId),
+  execute: (
+    adjList,
+    start,
+    goal,
+    earlyStop,
+    usePathLoopBreaking,
+    useClosedSet,
+    graphId = "tree"
+  ) =>
+    executeUCS(adjList, start, goal, earlyStop, usePathLoopBreaking, graphId),
 };

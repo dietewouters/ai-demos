@@ -53,14 +53,19 @@ const stoppingOptions = [
 
 const loopBreakingOptions = [
   {
-    value: "on",
-    label: "On",
-    description: "Prevents revisiting nodes (efficient)",
+    value: "none",
+    label: "Off",
+    description: "No loop avoidance, revisits allowed",
   },
   {
-    value: "off",
-    label: "Off",
-    description: "Allows revisiting nodes (can cause loops)",
+    value: "path",
+    label: "On",
+    description: "Rejects paths that revisit nodes",
+  },
+  {
+    value: "closed",
+    label: "Redundant Path Elimination with closed set",
+    description: "Rejects nodes that were already expanded",
   },
 ];
 
@@ -72,7 +77,7 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
   const [selectedGraph, setSelectedGraph] = useState<string>("tree");
   const [algorithmId, setAlgorithmId] = useState<string>("bfs");
   const [stoppingCriterion, setStoppingCriterion] = useState<string>("late");
-  const [loopBreaking, setLoopBreaking] = useState<string>("on");
+  const [loopBreaking, setLoopBreaking] = useState<string>("none");
   const [startNode, setStartNode] = useState<string>("S");
   const [goalNode, setGoalNode] = useState<string>("G");
   const [searchState, setSearchState] = useState<SearchState>({
@@ -109,14 +114,16 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
     if (!currentAlgorithm) return [];
     const adjList = buildAdjacencyList();
     const earlyStop = stoppingCriterion === "early";
-    const forceLoopBreaking =
-      selectedGraph === "ex31" ? true : loopBreaking === "on";
+    const usePathLoopBreaking = loopBreaking === "path";
+    const useClosedSet = loopBreaking === "closed";
+
     return currentAlgorithm.execute(
       adjList,
       startNode,
       goalNode,
       earlyStop,
-      forceLoopBreaking,
+      usePathLoopBreaking,
+      useClosedSet,
       selectedGraph,
       { beamWidth }
     );
@@ -658,7 +665,8 @@ export default function SearchDemo({ algorithms }: SearchDemoProps) {
                       </text>
                       {(algorithmId === "greedy" ||
                         algorithmId === "astar" ||
-                        algorithmId === "idastar") &&
+                        algorithmId === "idastar" ||
+                        algorithmId === "beam") &&
                         heuristicValue !== undefined && (
                           <text
                             x={node.x - 20}

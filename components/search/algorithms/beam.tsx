@@ -12,7 +12,6 @@ function executeBeamSearch(
   extra?: any
 ): SearchStep[] {
   const steps: SearchStep[] = [];
-  const visited = new Set<string>();
   const parent: { [key: string]: string } = {};
   const paths: { [key: string]: string[] } = { [startNode]: [startNode] };
 
@@ -23,38 +22,45 @@ function executeBeamSearch(
   const heuristics = graphs[graphId]?.heuristics ?? {};
   const heuristic = (node: string) => heuristics[node] ?? Infinity;
 
+  const sortByH = (arr: { node: string; path: string[] }[]) =>
+    arr.sort((a, b) => heuristic(a.node) - heuristic(b.node));
+
+  const snapshotFrontierNodes = (arr: { node: string; path: string[] }[]) =>
+    arr.map((f) => f.node);
+
+  const snapshotFrontierPaths = (arr: { node: string; path: string[] }[]) =>
+    arr.map((f) => f.path);
+
+  // Sorteer de initiële frontier voor consistentie
+  sortByH(frontier);
+
   steps.push({
     stepType: "start",
     currentNode: startNode,
-    visited: new Set(),
-    frontier: [startNode],
+    visited: new Set(), // niet meer gebruikt
+    frontier: snapshotFrontierNodes(frontier),
     parent: { ...parent },
-    pathQueue: [[startNode]],
-    description: `Start Beam Search (k=${beamWidth}) at ${startNode}`,
+    pathQueue: snapshotFrontierPaths(frontier),
+    description: `Start Beam Search (k=${beamWidth}) at ${startNode} — no loop breaking`,
   });
 
   while (frontier.length > 0) {
+    sortByH(frontier);
+
     const newFrontier: { node: string; path: string[] }[] = [];
 
     for (const { node: currentNode, path: currentPath } of frontier) {
-      if (visited.has(currentNode)) continue;
-
-      visited.add(currentNode);
-
       steps.push({
         stepType: "take_from_frontier",
         currentNode,
-        visited: new Set(visited),
-        frontier: frontier.map((f) => f.node),
+        visited: new Set(), // placeholder
+        frontier: snapshotFrontierNodes(frontier),
         parent: { ...parent },
-        pathQueue: frontier.map((f) => f.path),
+        pathQueue: snapshotFrontierPaths(frontier),
         takenNode: currentNode,
         exploredEdge:
           currentPath.length > 1
-            ? {
-                from: currentPath[currentPath.length - 2],
-                to: currentNode,
-              }
+            ? { from: currentPath[currentPath.length - 2], to: currentNode }
             : undefined,
         description: `Processing ${currentNode}`,
       });
@@ -63,7 +69,7 @@ function executeBeamSearch(
         steps.push({
           stepType: "goal_found",
           currentNode,
-          visited: new Set(visited),
+          visited: new Set(),
           frontier: [],
           parent: { ...parent },
           finalPath: currentPath,
@@ -75,60 +81,51 @@ function executeBeamSearch(
         return steps;
       }
 
-      const neighbors = (adjList[currentNode] || []).filter(
-        (n) => !visited.has(n)
-      );
+      const neighbors = adjList[currentNode] || [];
 
       steps.push({
         stepType: "highlight_edges",
         currentNode,
-        visited: new Set(visited),
-        frontier: [],
+        visited: new Set(),
+        frontier: snapshotFrontierNodes(frontier),
         parent: { ...parent },
-        pathQueue: [],
-        highlightedEdges: neighbors.map((n) => ({
-          from: currentNode,
-          to: n,
-        })),
+        pathQueue: snapshotFrontierPaths(frontier),
+        highlightedEdges: neighbors.map((n) => ({ from: currentNode, to: n })),
         description: `Exploring neighbors of ${currentNode}: ${neighbors.join(
           ", "
         )}`,
       });
 
       for (const neighbor of neighbors) {
-        if (!paths[neighbor]) {
-          parent[neighbor] = currentNode;
-          paths[neighbor] = [...currentPath, neighbor];
-          newFrontier.push({
-            node: neighbor,
-            path: [...currentPath, neighbor],
-          });
-        }
+        // Geen loopbreaking → ook als deze al eerder in een pad zat
+        parent[neighbor] = currentNode;
+        const newPath = [...currentPath, neighbor];
+        paths[neighbor] = newPath;
+        newFrontier.push({ node: neighbor, path: newPath });
       }
     }
 
-    // Keep only best k based on heuristic
-    newFrontier.sort((a, b) => heuristic(a.node) - heuristic(b.node));
+    sortByH(newFrontier);
     frontier = newFrontier.slice(0, beamWidth);
 
     steps.push({
       stepType: "add_to_frontier",
       currentNode: "",
-      visited: new Set(visited),
-      frontier: frontier.map((f) => f.node),
+      visited: new Set(),
+      frontier: snapshotFrontierNodes(frontier),
       parent: { ...parent },
-      pathQueue: frontier.map((f) => f.path),
-      addedNodes: frontier.map((f) => f.node),
-      description: `Beamwidth = ${beamWidth} => keeping top ${
+      pathQueue: snapshotFrontierPaths(frontier),
+      addedNodes: snapshotFrontierNodes(frontier),
+      description: `Beamwidth = ${beamWidth} → keeping top ${
         frontier.length
-      } nodes: ${frontier.map((f) => f.node).join(", ")}`,
+      } nodes: ${snapshotFrontierNodes(frontier).join(", ")}`,
     });
   }
 
   steps.push({
     stepType: "add_to_frontier",
     currentNode: "",
-    visited: new Set(visited),
+    visited: new Set(),
     frontier: [],
     parent: { ...parent },
     pathQueue: [],
@@ -142,13 +139,14 @@ function executeBeamSearch(
 export const Beam: Algorithm = {
   id: "beam",
   name: "Beam Search",
-  description: "",
+  description: "Beam Search zonder loopbreaking (alle paden toegestaan)",
   execute: (
     adjList,
     start,
     goal,
     _earlyStop,
-    _loopBreaking,
+    _usePathLoopBreaking,
+    _useClosedSet,
     graphId = "tree",
     extra = {}
   ) => executeBeamSearch(adjList, start, goal, extra.beamWidth || 2, graphId),
