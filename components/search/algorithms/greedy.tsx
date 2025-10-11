@@ -60,7 +60,7 @@ function executeGreedySearch(
   _extra: { [key: string]: any } = {}
 ): SearchStep[] {
   const steps: SearchStep[] = [];
-  const visited = new Set<string>();
+  const visited = new Set<string>(); // CLOSED set
   const parent: Record<string, string> = {};
 
   const heuristics = graphs[graphId]?.heuristics ?? {};
@@ -77,18 +77,37 @@ function executeGreedySearch(
     frontier: [startNode],
     parent: {},
     pathQueue: [[startNode]],
-    description: `Start Greedy Best-First from ${startNode}. Goal: ${goalNode}.`,
+    description: `Start Greedy Best-First Search from ${startNode}. Goal: ${goalNode}.`,
   });
 
-  while (frontier.length > 0) {
-    // Always expand the node with the smallest heuristic
+  const MAX_STEPS = 5000;
+  let stepCounter = 0;
+
+  while (frontier.length > 0 && stepCounter < MAX_STEPS) {
+    stepCounter++;
+
+    // Expand node with lowest heuristic
     frontier.sort((a, b) => h(a.node) - h(b.node));
     const { node: currentNode, path: currentPath } = frontier.shift()!;
 
-    // CLOSED-set: skip if already expanded before
+    // CLOSED SET: skip if already expanded before
     if (useClosedSet && visited.has(currentNode)) {
+      steps.push({
+        stepType: "skip_closed",
+        currentNode,
+        visited: new Set(visited),
+        frontier: frontier.map((f) => f.node),
+        parent: { ...parent },
+        pathQueue: frontier.map((f) => f.path),
+        description: `Skipping path ${currentPath.join(
+          " → "
+        )} because its last node (${currentNode}) is already in CLOSED set.`,
+      });
       continue;
     }
+
+    // First time expansion → add to CLOSED
+    visited.add(currentNode);
 
     steps.push({
       stepType: "take_from_frontier",
@@ -102,11 +121,12 @@ function executeGreedySearch(
         currentPath.length > 1
           ? { from: currentPath[currentPath.length - 2], to: currentNode }
           : undefined,
-      description: `Taking node with lowest heuristic: ${currentPath.join(
+      description: `Expanding ${currentPath.join(
         " → "
-      )} (h: ${h(currentNode)})`,
+      )} with lowest heuristic (h=${h(currentNode)}).`,
     });
 
+    // Goal check
     if (currentNode === goalNode) {
       steps.push({
         stepType: "goal_found",
@@ -116,14 +136,14 @@ function executeGreedySearch(
         parent: { ...parent },
         finalPath: currentPath,
         pathQueue: [],
-        description: `Goal ${goalNode} found! Path: ${currentPath.join(" → ")}`,
+        description: `Goal ${goalNode} found! Final path: ${currentPath.join(
+          " → "
+        )}.`,
       });
       return steps;
     }
 
-    visited.add(currentNode);
-
-    // Deterministic neighbor order (visual consistency)
+    // Order neighbors deterministically
     const orderedNeighbors = sortByDirection(
       currentNode,
       adjList[currentNode] || []
@@ -145,20 +165,14 @@ function executeGreedySearch(
       )}`,
     });
 
-    // Loop-handling filters
-    let validNeighbors: string[];
-    if (useClosedSet) {
-      // Only exclude nodes already globally visited. Do NOT check frontier.
-      validNeighbors = orderedNeighbors.filter((n) => !visited.has(n));
-    } else if (usePathLoopBreaking) {
-      // Path-based: exclude only nodes present in the current path
-      validNeighbors = orderedNeighbors.filter((n) => !currentPath.includes(n));
-    } else {
-      // No loop breaking
-      validNeighbors = orderedNeighbors;
-    }
+    // Determine valid neighbors according to options
+    const validNeighbors = orderedNeighbors.filter((n) => {
+      if (usePathLoopBreaking && currentPath.includes(n)) return false;
+      if (useClosedSet && visited.has(n)) return false;
+      return true;
+    });
 
-    // Track EXACT items we add now (to avoid listing old frontier entries in the log)
+    // Add new neighbors to frontier
     const addedItems: Item[] = [];
     const addedNodes: string[] = [];
 
@@ -170,15 +184,27 @@ function executeGreedySearch(
       addedItems.push(newItem);
       addedNodes.push(neighbor);
 
+      // Early stop check
       if (earlyStop && neighbor === goalNode) {
+        steps.push({
+          stepType: "add_to_frontier",
+          currentNode,
+          visited: new Set(visited),
+          frontier: frontier.map((f) => f.node),
+          parent: { ...parent },
+          pathQueue: frontier.map((f) => f.path),
+          addedNodes: addedNodes,
+          description: `Early stop! Added ${neighbor} to frontier.`,
+        });
+
         steps.push({
           stepType: "goal_found",
           currentNode: neighbor,
           visited: new Set(visited),
           frontier: [],
           parent: { ...parent },
-          finalPath: newPath,
           pathQueue: [],
+          finalPath: newPath,
           description: `Goal ${goalNode} found early. Path: ${newPath.join(
             " → "
           )}`,
@@ -187,6 +213,7 @@ function executeGreedySearch(
       }
     }
 
+    // Log additions
     steps.push({
       stepType: "add_to_frontier",
       currentNode,
@@ -200,27 +227,38 @@ function executeGreedySearch(
         .slice()
         .sort((a, b) => h(a.node) - h(b.node))
         .map((f) => f.path),
-      addedNodes: addedNodes, // only the nodes we just pushed
+      addedNodes: addedNodes,
       description:
         addedItems.length === 0
           ? `No new nodes added to frontier.`
-          : `Adding to frontier (sorted by h):\n${addedItems
-              .map((it) => `${it.path.join(" → ")} (h: ${h(it.node)})`)
+          : `Added to frontier (sorted by h):\n${addedItems
+              .map((it) => `${it.path.join(" → ")} (h=${h(it.node)})`)
               .join(",\n")}`,
     });
   }
 
-  // Failure
-  steps.push({
-    stepType: "add_to_frontier",
-    currentNode: "",
-    visited: new Set(visited),
-    frontier: [],
-    parent: { ...parent },
-    pathQueue: [],
-    addedNodes: [],
-    description: `No path to goal found.`,
-  });
+  if (stepCounter >= MAX_STEPS) {
+    steps.push({
+      stepType: "error",
+      currentNode: "",
+      visited: new Set(visited),
+      frontier: frontier.map((f) => f.node),
+      parent: { ...parent },
+      pathQueue: [],
+      description: `Search stopped after ${MAX_STEPS} steps to prevent infinite loop.`,
+    });
+  } else {
+    steps.push({
+      stepType: "add_to_frontier",
+      currentNode: "",
+      visited: new Set(visited),
+      frontier: [],
+      parent: { ...parent },
+      pathQueue: [],
+      addedNodes: [],
+      description: `No path to goal found.`,
+    });
+  }
 
   return steps;
 }

@@ -8,7 +8,7 @@ function executeIDAStar(
   startNode: string,
   goalNode: string,
   earlyStop = false,
-  loopBreaking = true,
+  useClosedSet = true,
   graphId: string = "tree"
 ): SearchStep[] {
   const steps: SearchStep[] = [];
@@ -45,13 +45,15 @@ function executeIDAStar(
     path: string[],
     g: number,
     bound: number,
-    minRef: { value: number }
+    minRef: { value: number },
+    closed: Set<string>
   ): number => {
     const f = g + heuristic(node);
+
     steps.push({
       stepType: "take_from_frontier",
       currentNode: node,
-      visited: new Set(path),
+      visited: new Set(closed),
       frontier: [],
       parent: {},
       pathQueue: [path],
@@ -70,7 +72,7 @@ function executeIDAStar(
         steps.push({
           stepType: "add_to_frontier",
           currentNode: node,
-          visited: new Set(path),
+          visited: new Set(closed),
           frontier: [],
           parent: {},
           pathQueue: [path],
@@ -89,24 +91,37 @@ function executeIDAStar(
       return -1;
     }
 
-    const neighbors = (adjList[node] || []).filter((n) => !path.includes(n));
+    // ✅ Markeer node in CLOSED set
+    closed.add(node);
 
+    // 1️⃣ Eerst ALLE buren highlighten (ongeacht CLOSED)
+    const allNeighbors = adjList[node] || [];
     steps.push({
       stepType: "highlight_edges",
       currentNode: node,
-      visited: new Set(path),
+      visited: new Set(closed),
       frontier: [],
       parent: {},
       pathQueue: [path],
-      highlightedEdges: neighbors.map((n) => ({ from: node, to: n })),
-      description: `Exploring neighbors of ${node}: ${neighbors.join(", ")}`,
+      highlightedEdges: allNeighbors.map((n) => ({ from: node, to: n })),
+      description: `Exploring neighbors of ${node}: ${allNeighbors.join(", ")}`,
       bound,
       fNew: minRef.value,
     });
 
+    // 2️⃣ Dan pas filteren op CLOSED-set
+    const neighbors = allNeighbors.filter((n) => !closed.has(n));
+
     for (const neighbor of neighbors) {
       const newG = g + getCost(node, neighbor);
-      const t = search(neighbor, [...path, neighbor], newG, bound, minRef);
+      const t = search(
+        neighbor,
+        [...path, neighbor],
+        newG,
+        bound,
+        minRef,
+        new Set(closed)
+      );
       if (t === -1) return -1;
     }
 
@@ -115,7 +130,7 @@ function executeIDAStar(
 
   while (!foundPath) {
     const minRef = { value: Infinity };
-    const t = search(startNode, [startNode], 0, threshold, minRef);
+    const t = search(startNode, [startNode], 0, threshold, minRef, new Set());
 
     if (t === Infinity) {
       steps.push({
@@ -173,22 +188,14 @@ function executeIDAStar(
 export const IDAStar: Algorithm = {
   id: "idastar",
   name: "IDA* Search",
-  description: "Iterative Deepening A* Search",
+  description: "Iterative Deepening A* Search (with CLOSED set)",
   execute: (
     adjList,
     start,
     goal,
     earlyStop,
-    usePathLoopBreaking,
+    _usePathLoopBreaking,
     useClosedSet,
     graphId = "tree"
-  ) =>
-    executeIDAStar(
-      adjList,
-      start,
-      goal,
-      earlyStop,
-      usePathLoopBreaking,
-      graphId
-    ),
+  ) => executeIDAStar(adjList, start, goal, earlyStop, useClosedSet, graphId),
 };

@@ -44,7 +44,7 @@ function executeDFS(
   startNode: string,
   goalNode: string,
   earlyStop = false,
-  loopBreaking = true,
+  usePathLoopBreaking = true,
   useClosedSet = false
 ): SearchStep[] {
   const steps: SearchStep[] = [];
@@ -58,7 +58,7 @@ function executeDFS(
   let stepCounter = 0;
   const MAX_STEPS = 5000;
 
-  // Start step
+  // Start
   steps.push({
     stepType: "start",
     currentNode: startNode,
@@ -73,11 +73,27 @@ function executeDFS(
     stepCounter++;
 
     const currentNode = frontier.pop()!;
-    // Skip already-visited nodes only in CLOSED-set mode.
-    if (useClosedSet && visited.has(currentNode)) continue;
+    const currentPath = paths[currentNode] ?? [currentNode];
 
-    if (!paths[currentNode]) paths[currentNode] = [currentNode];
-    visited.add(currentNode);
+    if (useClosedSet) {
+      if (visited.has(currentNode)) {
+        steps.push({
+          stepType: "skip_closed",
+          currentNode,
+          visited: new Set(visited),
+          frontier: [...frontier],
+          parent: { ...parent },
+          pathQueue: getPathQueue(),
+          description: `Skipping path ${currentPath.join(
+            " → "
+          )} because its last node (${currentNode}) is already in CLOSED set.`,
+        });
+        continue;
+      }
+      visited.add(currentNode);
+    } else {
+      visited.add(currentNode);
+    }
 
     const exploredEdge =
       parent[currentNode] !== undefined
@@ -93,9 +109,7 @@ function executeDFS(
       pathQueue: getPathQueue(),
       takenNode: currentNode,
       exploredEdge,
-      description: `Taking path from frontier: ${paths[currentNode].join(
-        " → "
-      )}`,
+      description: `Taking path from frontier: ${currentPath.join(" → ")}`,
     });
 
     if (currentNode === goalNode) {
@@ -106,15 +120,14 @@ function executeDFS(
         frontier: [...frontier],
         parent: { ...parent },
         pathQueue: getPathQueue(),
-        finalPath: paths[currentNode],
-        description: `Goal ${goalNode} found! Final path: ${paths[
-          currentNode
-        ].join(" → ")}`,
+        finalPath: currentPath,
+        description: `Goal ${goalNode} found! Final path: ${currentPath.join(
+          " → "
+        )}`,
       });
       break;
     }
 
-    // Order neighbors deterministically
     const neighbors = sortByDirection(currentNode, adjList[currentNode] || []);
 
     steps.push({
@@ -130,27 +143,21 @@ function executeDFS(
       )}`,
     });
 
-    // Determine valid neighbors according to the selected mode.
-    // - CLOSED-set: filter ONLY by visited (allow duplicates in frontier).
-    // - Path-based: filter by presence in the CURRENT PATH (allow duplicates in frontier).
-    // - No loop breaking: take all neighbors.
-    const currentPath = paths[currentNode] ?? [currentNode];
-
-    const validNeighbors = useClosedSet
-      ? neighbors.filter((n) => !visited.has(n)) // <-- no frontier check here
-      : loopBreaking
-      ? neighbors.filter((n) => !currentPath.includes(n)) // path-based
-      : neighbors;
+    const validNeighbors = neighbors.filter((n) => {
+      if (usePathLoopBreaking && currentPath.includes(n)) return false;
+      if (useClosedSet && visited.has(n)) return false;
+      return true;
+    });
 
     if (validNeighbors.length > 0) {
-      // Push in reverse to ensure Up/Right/Left/Down are popped in that order
       const pushOrder = [...validNeighbors].reverse();
+      const addedNodes: string[] = [];
 
       for (const neighbor of pushOrder) {
         frontier.push(neighbor);
-        if (!paths[currentNode]) paths[currentNode] = [currentNode];
         parent[neighbor] = currentNode;
-        paths[neighbor] = [...paths[currentNode], neighbor];
+        paths[neighbor] = [...currentPath, neighbor];
+        addedNodes.push(neighbor);
 
         if (earlyStop && neighbor === goalNode) {
           steps.push({
@@ -160,8 +167,8 @@ function executeDFS(
             frontier: [...frontier],
             parent: { ...parent },
             pathQueue: getPathQueue(),
-            addedNodes: validNeighbors,
-            description: `Adding to frontier: ${paths[neighbor].join(" → ")}`,
+            addedNodes,
+            description: `Early stop! Added ${neighbor} to frontier.`,
           });
 
           steps.push({
@@ -172,11 +179,10 @@ function executeDFS(
             parent: { ...parent },
             pathQueue: getPathQueue(),
             finalPath: paths[neighbor],
-            description: `Goal ${goalNode} found early in frontier! Path: ${paths[
+            description: `Goal ${goalNode} found in frontier! Path: ${paths[
               neighbor
             ].join(" → ")}`,
           });
-
           return steps;
         }
       }
@@ -188,10 +194,13 @@ function executeDFS(
         frontier: [...frontier],
         parent: { ...parent },
         pathQueue: getPathQueue(),
-        addedNodes: validNeighbors,
-        description: `Adding to frontier:\n${validNeighbors
-          .map((n) => paths[n].join(" → "))
-          .join(", \n")}`,
+        addedNodes,
+        description:
+          addedNodes.length > 0
+            ? `Added to frontier:\n${addedNodes
+                .map((n) => paths[n].join(" → "))
+                .join(", ")}`
+            : "No new nodes added to frontier.",
       });
     } else {
       steps.push({
@@ -204,10 +213,10 @@ function executeDFS(
         addedNodes: [],
         description: `No new nodes to add (${
           useClosedSet
-            ? "all neighbors already visited"
-            : loopBreaking
+            ? "all neighbors already in CLOSED"
+            : usePathLoopBreaking
             ? "all neighbors already in current path"
-            : "processed"
+            : "none left"
         }).`,
       });
     }

@@ -4,23 +4,57 @@ import type { SearchStep } from "../app/search";
 import type { Algorithm } from "../algorithms/types";
 import { graphs } from "../app/graphs";
 
+/**
+ * Parse "x_y" node ids into [x,y]. Returns null for non-grid ids.
+ */
+const parseCoords = (id: string): [number, number] | null => {
+  const parts = id.split("_");
+  if (parts.length !== 2) return null;
+  const x = parseInt(parts[0], 10);
+  const y = parseInt(parts[1], 10);
+  if (Number.isNaN(x) || Number.isNaN(y)) return null;
+  return [x, y];
+};
+
+/**
+ * Deterministic neighbor ordering: Up, Right, Left, Down, then others.
+ */
+const sortByDirection = (current: string, neighbors: string[]) => {
+  const coords = parseCoords(current);
+  if (!coords) return [...neighbors].sort();
+  const [cx, cy] = coords;
+
+  const dirScore = (id: string) => {
+    const c = parseCoords(id);
+    if (!c) return 99;
+    const [x, y] = c;
+    if (y < cy && x === cx) return 0; // up
+    if (x > cx && y === cy) return 1; // right
+    if (x < cx && y === cy) return 2; // left
+    if (y > cy && x === cx) return 3; // down
+    return 4;
+  };
+
+  return [...neighbors].sort((a, b) => dirScore(a) - dirScore(b));
+};
+
 function executeAStar(
   adjList: { [key: string]: string[] },
   startNode: string,
   goalNode: string,
   earlyStop = false,
-  loopBreaking = true,
+  useClosedSet = true,
   graphId: string = "tree"
 ): SearchStep[] {
   const steps: SearchStep[] = [];
-  const visited = new Set<string>();
+  const visited = new Set<string>(); // CLOSED set
   const parent: Record<string, string> = {};
+  const gScore: Record<string, number> = { [startNode]: 0 };
 
-  // Heuristieken en kosten uit de graph-definitie
+  // Heuristics en kosten
   const heuristics = graphs[graphId]?.heuristics ?? {};
   const heuristic = (node: string) => heuristics[node] ?? Infinity;
 
-  // Kosten lookup: key = `${from}->${to}`
   const costs = new Map<string, number>();
   for (const { from, to, cost } of graphs[graphId]?.costs ?? []) {
     costs.set(`${from}->${to}`, cost);
@@ -32,19 +66,21 @@ function executeAStar(
   type FrontierItem = {
     node: string;
     path: string[];
-    cost: number;
-    heuristic: number;
+    g: number;
+    h: number;
   };
 
   const frontier: FrontierItem[] = [
-    {
-      node: startNode,
-      path: [startNode],
-      cost: 0,
-      heuristic: heuristic(startNode),
-    },
+    { node: startNode, path: [startNode], g: 0, h: heuristic(startNode) },
   ];
 
+  const getPathQueue = () =>
+    frontier
+      .slice()
+      .sort((a, b) => a.g + a.h - (b.g + b.h))
+      .map((f) => f.path);
+
+  // Start step
   steps.push({
     stepType: "start",
     currentNode: startNode,
@@ -52,99 +88,116 @@ function executeAStar(
     frontier: [startNode],
     parent: {},
     pathQueue: [[startNode]],
-    description: `Start A* Search from ${startNode}, goal ${goalNode}.`,
+    description: `Start A* from ${startNode}. Goal: ${goalNode}`,
   });
 
-  while (frontier.length > 0) {
-    // Sorteer op f(n) = g + h
-    frontier.sort((a, b) => a.cost + a.heuristic - (b.cost + b.heuristic));
+  let stepCounter = 0;
+  const MAX_STEPS = 5000;
 
+  while (frontier.length > 0 && stepCounter < MAX_STEPS) {
+    stepCounter++;
+
+    frontier.sort((a, b) => a.g + a.h - (b.g + b.h));
     const {
       node: currentNode,
       path: currentPath,
-      cost: gCost,
+      g: gCost,
+      h: hCost,
     } = frontier.shift()!;
 
-    const currentVisited = new Set(visited);
+    if (useClosedSet && visited.has(currentNode)) {
+      steps.push({
+        stepType: "skip_closed",
+        currentNode,
+        visited: new Set(visited),
+        frontier: frontier.map((f) => f.node),
+        parent: { ...parent },
+        pathQueue: getPathQueue(),
+        description: `Skipping ${currentNode} — already in CLOSED set.`,
+      });
+      continue;
+    }
+
+    if (useClosedSet) visited.add(currentNode);
 
     steps.push({
       stepType: "take_from_frontier",
       currentNode,
-      visited: new Set(currentVisited),
+      visited: new Set(visited),
       frontier: frontier.map((f) => f.node),
       parent: { ...parent },
-      pathQueue: frontier.map((f) => f.path),
+      pathQueue: getPathQueue(),
       takenNode: currentNode,
       exploredEdge:
         currentPath.length > 1
-          ? { from: currentPath[currentPath.length - 2], to: currentNode }
+          ? {
+              from: currentPath[currentPath.length - 2],
+              to: currentNode,
+            }
           : undefined,
-      description: `Taking node with lowest f(n)=g+h: ${currentPath.join(
+      description: `Taking node ${currentNode} with lowest f(n)=g+h: ${currentPath.join(
         " → "
-      )} (g: ${gCost}, h: ${heuristic(currentNode)}, f: ${
-        gCost + heuristic(currentNode)
-      })`,
+      )} (g: ${gCost}, h: ${hCost}, f: ${gCost + hCost})`,
     });
 
     if (currentNode === goalNode) {
       steps.push({
         stepType: "goal_found",
         currentNode,
-        visited: new Set(currentVisited),
+        visited: new Set(visited),
         frontier: [],
         parent: { ...parent },
         finalPath: currentPath,
         pathQueue: [],
-        description: `Goal ${goalNode} found! Path: ${currentPath.join(
+        description: `Goal ${goalNode} found! Final path: ${currentPath.join(
           " → "
         )} (Total cost g: ${gCost})`,
       });
       return steps;
     }
 
-    visited.add(currentNode);
-
-    const neighbors = (adjList[currentNode] || []).filter((n) => {
-      if (!loopBreaking) return true;
-      // CLOSED-set + geen herhaling binnen huidig pad
-      return !visited.has(n) && !currentPath.includes(n);
-    });
-
+    const orderedNeighbors = sortByDirection(
+      currentNode,
+      adjList[currentNode] || []
+    );
     steps.push({
       stepType: "highlight_edges",
       currentNode,
       visited: new Set(visited),
       frontier: frontier.map((f) => f.node),
       parent: { ...parent },
-      pathQueue: frontier.map((f) => f.path),
-      highlightedEdges: neighbors.map((n) => ({ from: currentNode, to: n })),
-      description: `Exploring neighbors of ${currentNode}: ${neighbors.join(
+      pathQueue: getPathQueue(),
+      highlightedEdges: orderedNeighbors.map((n) => ({
+        from: currentNode,
+        to: n,
+      })),
+      description: `Exploring neighbors of ${currentNode}: ${orderedNeighbors.join(
         ", "
       )}`,
     });
 
-    const addedNodes: string[] = [];
+    const addedNeighbors: string[] = [];
 
-    for (const neighbor of neighbors) {
-      const newCost = gCost + getCost(currentNode, neighbor);
+    for (const neighbor of orderedNeighbors) {
+      if (useClosedSet && visited.has(neighbor)) continue;
+
+      const tentativeG = gCost + getCost(currentNode, neighbor);
       const existing = frontier.find((f) => f.node === neighbor);
 
-      // Alleen toevoegen als we geen item hebben, of als we een betere g-cost hebben
-      if (!existing || newCost < existing.cost) {
-        if (existing) {
-          const index = frontier.indexOf(existing);
-          frontier.splice(index, 1);
-        }
+      if (!existing || tentativeG < existing.g) {
         parent[neighbor] = currentNode;
+        gScore[neighbor] = tentativeG;
+
         const newPath = [...currentPath, neighbor];
+        const newH = heuristic(neighbor);
 
         frontier.push({
           node: neighbor,
           path: newPath,
-          cost: newCost,
-          heuristic: heuristic(neighbor),
+          g: tentativeG,
+          h: newH,
         });
-        addedNodes.push(neighbor);
+        addedNeighbors.push(neighbor);
 
         if (earlyStop && neighbor === goalNode) {
           steps.push({
@@ -157,7 +210,7 @@ function executeAStar(
             pathQueue: [],
             description: `Goal ${goalNode} found early. Path: ${newPath.join(
               " → "
-            )}`,
+            )} (g: ${tentativeG}, h: ${newH})`,
           });
           return steps;
         }
@@ -168,40 +221,51 @@ function executeAStar(
       stepType: "add_to_frontier",
       currentNode,
       visited: new Set(visited),
-      frontier: [...frontier]
-        .sort((a, b) => a.cost + a.heuristic - (b.cost + b.heuristic))
+      frontier: frontier
+        .slice()
+        .sort((a, b) => a.g + a.h - (b.g + b.h))
         .map((f) => f.node),
       parent: { ...parent },
-      pathQueue: frontier
-        .slice()
-        .sort((a, b) => a.cost + a.heuristic - (b.cost + b.heuristic))
-        .map((f) => f.path),
-      addedNodes,
+      pathQueue: getPathQueue(),
+      addedNodes: addedNeighbors,
       description:
-        addedNodes.length > 0
-          ? `Adding to frontier:\n${frontier
-              .filter((f) => addedNodes.includes(f.node))
+        addedNeighbors.length === 0
+          ? `No new nodes added to frontier.`
+          : `Added to frontier:\n${frontier
+              .filter((f) => addedNeighbors.includes(f.node))
+              .sort((a, b) => a.g + a.h - (b.g + b.h))
               .map(
                 (f) =>
-                  `${f.path.join(" → ")} (g: ${f.cost}, h: ${
-                    f.heuristic
-                  } → f: ${f.cost + f.heuristic})`
+                  `${f.path.join(" → ")} (g: ${f.g}, h: ${f.h}, f: ${
+                    f.g + f.h
+                  })`
               )
-              .join(",\n")}`
-          : "No new nodes added to frontier.",
+              .join(",\n")}`,
     });
   }
 
-  steps.push({
-    stepType: "add_to_frontier",
-    currentNode: "",
-    visited: new Set(visited),
-    frontier: [],
-    parent: { ...parent },
-    pathQueue: [],
-    addedNodes: [],
-    description: "No path to goal found.",
-  });
+  if (stepCounter >= MAX_STEPS) {
+    steps.push({
+      stepType: "error",
+      currentNode: "",
+      visited: new Set(visited),
+      frontier: [],
+      parent: {},
+      pathQueue: [],
+      description: `Search stopped after ${MAX_STEPS} steps to prevent infinite loop.`,
+    });
+  } else {
+    steps.push({
+      stepType: "add_to_frontier",
+      currentNode: "",
+      visited: new Set(visited),
+      frontier: [],
+      parent: {},
+      pathQueue: [],
+      addedNodes: [],
+      description: `No path to goal found.`,
+    });
+  }
 
   return steps;
 }
@@ -209,15 +273,14 @@ function executeAStar(
 export const AStar: Algorithm = {
   id: "astar",
   name: "A* Search",
-  description: "Search that uses f(n) = g(n) + h(n)",
+  description: "Search using f(n) = g(n) + h(n) with mandatory CLOSED set.",
   execute: (
     adjList,
     start,
     goal,
     earlyStop,
-    usePathLoopBreaking,
-    useClosedSet,
+    _usePathLoopBreaking,
+    _useClosedSet,
     graphId = "tree"
-  ) =>
-    executeAStar(adjList, start, goal, earlyStop, usePathLoopBreaking, graphId),
+  ) => executeAStar(adjList, start, goal, earlyStop, true, graphId),
 };

@@ -66,10 +66,25 @@ function executeBFS(
     stepCounter++;
     const { node: currentNode, path: currentPath } = frontier.shift()!;
 
-    // CLOSED SET: skip node if already visited
-    if (useClosedSet && visited.has(currentNode)) continue;
-
-    visited.add(currentNode);
+    if (useClosedSet) {
+      if (visited.has(currentNode)) {
+        steps.push({
+          stepType: "skip_closed",
+          currentNode,
+          visited: new Set(visited),
+          frontier: frontier.map((f) => f.node),
+          parent: { ...parent },
+          pathQueue: frontier.map((f) => f.path),
+          description: `Skipping path ${currentPath.join(
+            " → "
+          )} because its last node (${currentNode}) is already in CLOSED set.`,
+        });
+        continue;
+      }
+      visited.add(currentNode);
+    } else {
+      visited.add(currentNode);
+    }
 
     const exploredEdge =
       currentPath.length > 1
@@ -123,23 +138,17 @@ function executeBFS(
       )}`,
     });
 
-    // Snapshot van bestaande paden
-    const existingPaths = new Set(frontier.map((f) => f.path.join("→")));
     const addedPaths: string[][] = [];
 
     for (const neighbor of neighbors) {
-      if (useClosedSet && visited.has(neighbor)) continue;
       if (usePathLoopBreaking && currentPath.includes(neighbor)) continue;
 
+      if (useClosedSet && visited.has(neighbor)) continue;
+
       const newPath = [...currentPath, neighbor];
-      const pathKey = newPath.join("→");
-
-      if (!existingPaths.has(pathKey)) {
-        addedPaths.push(newPath);
-      }
-
       frontier.push({ node: neighbor, path: newPath });
       parent[neighbor] = currentNode;
+      addedPaths.push(newPath);
 
       if (earlyStop && neighbor === goalNode) {
         steps.push({
@@ -149,7 +158,7 @@ function executeBFS(
           frontier: frontier.map((f) => f.node),
           parent: { ...parent },
           pathQueue: frontier.map((f) => f.path),
-          addedNodes: addedPaths.map((p) => p[p.length - 1]),
+          addedNodes: [neighbor],
           description: `Early stop! Added ${neighbor} to frontier.`,
         });
 
@@ -183,18 +192,6 @@ function executeBFS(
               .map((p) => p.join(" → "))
               .join(", ")}`
           : "No new nodes added to frontier.",
-    });
-  }
-
-  if (stepCounter >= MAX_STEPS) {
-    steps.push({
-      stepType: "error",
-      currentNode: "",
-      visited: new Set(visited),
-      frontier: frontier.map((f) => f.node),
-      parent: { ...parent },
-      pathQueue: [],
-      description: `Search stopped after ${MAX_STEPS} steps to prevent infinite loop.`,
     });
   }
 

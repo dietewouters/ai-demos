@@ -41,7 +41,8 @@ function executeIterativeDeepening(
   startNode: string,
   goalNode: string,
   earlyStop = false,
-  loopBreaking = true
+  usePathLoopBreaking = true,
+  useClosedSet = false
 ): SearchStep[] {
   const steps: SearchStep[] = [];
   let stepCounter = 0;
@@ -62,7 +63,7 @@ function executeIterativeDeepening(
     currentDepthLimit: number
   ): "found" | "cutoff" | "failure" {
     let cutoffOccurred = false;
-
+    const visited = new Set<string>();
     let activePaths: string[][] = [[startNode]];
 
     while (activePaths.length > 0 && stepCounter < MAX_STEPS) {
@@ -72,34 +73,48 @@ function executeIterativeDeepening(
       const currentNode = currentPath[currentPath.length - 1];
       const currentDepth = currentPath.length - 1;
 
-      const visited = loopBreaking
-        ? new Set<string>(currentPath)
-        : new Set<string>();
+      if (useClosedSet && visited.has(currentNode)) {
+        steps.push({
+          stepType: "skip_closed",
+          currentNode,
+          visited: new Set(visited),
+          frontier: activePaths.map((p) => p[p.length - 1]),
+          parent: {},
+          pathQueue: [...activePaths],
+          description: `Skipping path ${currentPath.join(
+            " → "
+          )} because its last node (${currentNode}) is already in CLOSED set.`,
+        });
+        continue;
+      }
 
-      const frontierNodes = activePaths.map((path) => path[path.length - 1]);
+      visited.add(currentNode);
+
+      const exploredEdge =
+        currentPath.length > 1
+          ? { from: currentPath[currentPath.length - 2], to: currentNode }
+          : undefined;
 
       steps.push({
         stepType: "take_from_frontier",
         currentNode,
-        visited,
-        frontier: frontierNodes,
+        visited: new Set(visited),
+        frontier: activePaths.map((p) => p[p.length - 1]),
         parent: {},
         pathQueue: [...activePaths],
         takenNode: currentNode,
-        exploredEdge:
-          currentPath.length > 1
-            ? { from: currentPath[currentPath.length - 2], to: currentNode }
-            : undefined,
+        exploredEdge,
         description: `Taking path from stack: ${currentPath.join(
           " → "
         )} (depth ${currentDepth}/${currentDepthLimit})`,
       });
 
+      // Goal check
       if (currentNode === goalNode) {
         steps.push({
           stepType: "goal_found",
           currentNode,
-          visited,
+          visited: new Set(visited),
           frontier: [],
           parent: {},
           pathQueue: [currentPath],
@@ -111,12 +126,13 @@ function executeIterativeDeepening(
         return "found";
       }
 
+      // Depth limit check
       if (currentDepth >= currentDepthLimit) {
         steps.push({
           stepType: "add_to_frontier",
           currentNode,
-          visited,
-          frontier: frontierNodes,
+          visited: new Set(visited),
+          frontier: activePaths.map((p) => p[p.length - 1]),
           parent: {},
           pathQueue: [...activePaths],
           addedNodes: [],
@@ -126,6 +142,7 @@ function executeIterativeDeepening(
         continue;
       }
 
+      // Neighbors in vaste volgorde
       const neighborsOrdered = sortByDirection(
         currentNode,
         adjList[currentNode] || []
@@ -134,8 +151,8 @@ function executeIterativeDeepening(
       steps.push({
         stepType: "highlight_edges",
         currentNode,
-        visited,
-        frontier: frontierNodes,
+        visited: new Set(visited),
+        frontier: activePaths.map((p) => p[p.length - 1]),
         parent: {},
         pathQueue: [...activePaths],
         highlightedEdges: neighborsOrdered.map((neighbor) => ({
@@ -147,9 +164,11 @@ function executeIterativeDeepening(
         )} (depth ${currentDepth}).`,
       });
 
-      const validNeighbors = loopBreaking
-        ? neighborsOrdered.filter((n) => !currentPath.includes(n))
-        : neighborsOrdered;
+      const validNeighbors = neighborsOrdered.filter((n) => {
+        if (usePathLoopBreaking && currentPath.includes(n)) return false;
+        if (useClosedSet && visited.has(n)) return false;
+        return true;
+      });
 
       if (validNeighbors.length > 0) {
         if (earlyStop && validNeighbors.includes(goalNode)) {
@@ -158,8 +177,8 @@ function executeIterativeDeepening(
           steps.push({
             stepType: "add_to_frontier",
             currentNode,
-            visited,
-            frontier: [...frontierNodes, goalNode],
+            visited: new Set(visited),
+            frontier: [...activePaths.map((p) => p[p.length - 1]), goalNode],
             parent: {},
             pathQueue: [...activePaths, goalPath],
             addedNodes: [goalNode],
@@ -169,7 +188,7 @@ function executeIterativeDeepening(
           steps.push({
             stepType: "goal_found",
             currentNode: goalNode,
-            visited,
+            visited: new Set(visited),
             frontier: [],
             parent: {},
             pathQueue: [goalPath],
@@ -187,33 +206,33 @@ function executeIterativeDeepening(
           .map((n) => [...currentPath, n]);
         activePaths.push(...newPaths);
 
-        const updatedFrontierNodes = activePaths.map((p) => p[p.length - 1]);
-
         steps.push({
           stepType: "add_to_frontier",
           currentNode,
-          visited,
-          frontier: updatedFrontierNodes,
+          visited: new Set(visited),
+          frontier: activePaths.map((p) => p[p.length - 1]),
           parent: {},
           pathQueue: [...activePaths],
           addedNodes: validNeighbors,
-          description: `Adding ${newPaths.length} new path(s):\n${newPaths
+          description: `Added ${newPaths.length} new path(s):\n${newPaths
             .map((p) => p.join(" → "))
-            .join("\n")}`,
+            .join(", ")}`,
         });
       } else {
         steps.push({
           stepType: "add_to_frontier",
           currentNode,
-          visited,
-          frontier: frontierNodes,
+          visited: new Set(visited),
+          frontier: activePaths.map((p) => p[p.length - 1]),
           parent: {},
           pathQueue: [...activePaths],
           addedNodes: [],
           description: `No valid neighbors from ${currentNode} ${
-            loopBreaking
-              ? "(would create a cycle in current path)"
-              : "(would backtrack immediately)"
+            useClosedSet
+              ? "(all neighbors already in CLOSED)"
+              : usePathLoopBreaking
+              ? "(all neighbors already in current path)"
+              : "(none left)"
           }.`,
         });
       }
@@ -290,7 +309,7 @@ function executeIterativeDeepening(
       frontier: [],
       parent: {},
       pathQueue: [],
-      description: `Search stopped after ${MAX_STEPS} steps to prevent timeout.`,
+      description: `Search stopped after ${MAX_STEPS} steps to prevent infinite loop.`,
     });
   }
 

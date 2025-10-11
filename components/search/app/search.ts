@@ -5,7 +5,8 @@ export interface SearchStep {
     | "add_to_frontier"
     | "take_from_frontier"
     | "goal_found"
-    | "error";
+    | "error"
+    | "skip_closed";
   currentNode: string;
   visited: Set<string>;
   frontier: string[];
