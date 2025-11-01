@@ -43,7 +43,15 @@ const sortByDirection = (current: string, neighbors: string[]) => {
 type FrontierItem = {
   node: string;
   path: string[];
-  cost: number;
+  cost: number; // g(n)
+};
+
+const frontierSignatureSet = (items: FrontierItem[]): Set<string> => {
+  const sigs = new Set<string>();
+  for (const f of items) {
+    sigs.add(`${f.node}|${f.cost}|${f.path.join("->")}`);
+  }
+  return sigs;
 };
 
 function executeUCS(
@@ -65,20 +73,16 @@ function executeUCS(
   const getCost = (from: string, to: string) =>
     costs.get(`${from}->${to}`) ?? 1;
 
-  type FrontierItem = { node: string; path: string[]; cost: number };
-
   const frontier: FrontierItem[] = [
     { node: startNode, path: [startNode], cost: 0 },
   ];
-  const visited = new Set<string>(); // altijd gebruiken voor “blauw”
-  const useNoLoopBreaking = !usePathLoopBreaking && !useClosedSet;
-  const gScore: Record<string, number> = { [startNode]: 0 };
 
-  const getPathQueue = () =>
-    frontier
-      .slice()
-      .sort((a, b) => a.cost - b.cost)
-      .map((f) => f.path);
+  const closed = new Set<string>();
+
+  const getSortedFrontier = () =>
+    frontier.slice().sort((a, b) => a.cost - b.cost);
+
+  const getPathQueue = () => getSortedFrontier().map((f) => f.path);
 
   steps.push({
     stepType: "start",
@@ -100,58 +104,60 @@ function executeUCS(
     const {
       node: currentNode,
       path: currentPath,
-      cost: gCost,
+      cost: currentCost,
     } = frontier.shift()!;
 
-    // ✳️ voeg altijd toe aan visited (voor blauwe markering)
-    visited.add(currentNode);
-
-    // Alleen overslaan in CLOSED-modus
-    if (
-      useClosedSet &&
-      Array.from(visited).slice(0, -1).includes(currentNode)
-    ) {
+    if (useClosedSet && closed.has(currentNode)) {
       steps.push({
         stepType: "skip_closed",
         currentNode,
-        visited: new Set(visited),
-        frontier: frontier.map((f) => f.node),
+        visited: new Set(closed),
+        frontier: getSortedFrontier().map((f) => f.node),
         parent: {},
         pathQueue: getPathQueue(),
-        description: `Skipping ${currentNode} (already CLOSED).`,
+        description: `Skipping path ${currentPath.join(
+          " → "
+        )} because its last node (${currentNode}) is already in CLOSED set.`,
       });
       continue;
     }
 
+    closed.add(currentNode);
+
+    const exploredEdge =
+      currentPath.length > 1
+        ? {
+            from: currentPath[currentPath.length - 2],
+            to: currentNode,
+          }
+        : undefined;
+
     steps.push({
       stepType: "take_from_frontier",
       currentNode,
-      visited: new Set(visited),
-      frontier: frontier.map((f) => f.node),
+      visited: new Set(closed),
+      frontier: getSortedFrontier().map((f) => f.node),
       parent: {},
       pathQueue: getPathQueue(),
       takenNode: currentNode,
-      exploredEdge:
-        currentPath.length > 1
-          ? { from: currentPath[currentPath.length - 2], to: currentNode }
-          : undefined,
-      description: `Taking lowest-cost path: ${currentPath.join(
+      exploredEdge,
+      description: `Taking lowest-cost path from frontier: ${currentPath.join(
         " → "
-      )} (cost: ${gCost})`,
+      )} (cost: ${currentCost})`,
     });
 
     if (currentNode === goalNode) {
       steps.push({
         stepType: "goal_found",
         currentNode,
-        visited: new Set(visited),
-        frontier: frontier.map((f) => f.node),
+        visited: new Set(closed),
+        frontier: getSortedFrontier().map((f) => f.node),
         parent: {},
         pathQueue: getPathQueue(),
         finalPath: currentPath,
         description: `Goal ${goalNode} found! Final path: ${currentPath.join(
           " → "
-        )} (Total cost: ${gCost})`,
+        )} (Total cost: ${currentCost})`,
       });
       return steps;
     }
@@ -161,95 +167,114 @@ function executeUCS(
       adjList[currentNode] || []
     );
 
-    const neighbors = useNoLoopBreaking
-      ? orderedNeighbors
-      : orderedNeighbors.filter((n) => {
-          if (usePathLoopBreaking && currentPath.includes(n)) return false;
-          if (useClosedSet && Array.from(visited).slice(0, -1).includes(n))
-            return false;
-          return true;
-        });
-
     steps.push({
       stepType: "highlight_edges",
       currentNode,
-      visited: new Set(visited),
-      frontier: frontier.map((f) => f.node),
+      visited: new Set(closed),
+      frontier: getSortedFrontier().map((f) => f.node),
       parent: {},
       pathQueue: getPathQueue(),
-      highlightedEdges: neighbors.map((n) => ({ from: currentNode, to: n })),
-      description: `Exploring neighbors of ${currentNode}: ${neighbors.join(
+      highlightedEdges: orderedNeighbors.map((n) => ({
+        from: currentNode,
+        to: n,
+      })),
+      description: `Exploring neighbors of ${currentNode}: ${orderedNeighbors.join(
         ", "
       )}`,
     });
 
-    const addedNeighbors: string[] = [];
+    const useNoLoopBreaking = !usePathLoopBreaking && !useClosedSet;
 
-    for (const neighbor of neighbors) {
-      const tentativeG = gCost + getCost(currentNode, neighbor);
+    const validNeighbors = useNoLoopBreaking
+      ? orderedNeighbors
+      : orderedNeighbors.filter((n) => {
+          if (usePathLoopBreaking && currentPath.includes(n)) {
+            return false;
+          }
+          if (useClosedSet && closed.has(n)) {
+            return false;
+          }
+          return true;
+        });
+
+    const beforeSigs = frontierSignatureSet(frontier);
+
+    for (const neighbor of validNeighbors) {
+      const newCost = currentCost + getCost(currentNode, neighbor);
       const newPath = [...currentPath, neighbor];
 
-      if (useNoLoopBreaking) {
-        frontier.push({ node: neighbor, path: newPath, cost: tentativeG });
-        addedNeighbors.push(neighbor);
-      } else {
-        if (gScore[neighbor] === undefined || tentativeG < gScore[neighbor]) {
-          gScore[neighbor] = tentativeG;
-          const existingIdx = frontier.findIndex(
-            (f) => f.node === neighbor && f.cost > tentativeG
-          );
-          if (existingIdx !== -1) frontier.splice(existingIdx, 1);
-          frontier.push({ node: neighbor, path: newPath, cost: tentativeG });
-          addedNeighbors.push(neighbor);
-          if (earlyStop && neighbor === goalNode) {
-            steps.push({
-              stepType: "goal_found",
-              currentNode: neighbor,
-              visited: new Set(visited),
-              frontier: [],
-              parent: {},
-              finalPath: newPath,
-              pathQueue: [],
-              description: `Goal ${goalNode} found early. Path: ${newPath.join(
-                " → "
-              )} (Total cost: ${tentativeG})`,
-            });
-            return steps;
-          }
-        }
+      frontier.push({
+        node: neighbor,
+        path: newPath,
+        cost: newCost,
+      });
+
+      if (earlyStop && neighbor === goalNode) {
       }
     }
+
+    const afterSorted = getSortedFrontier();
+    const afterSigs = frontierSignatureSet(frontier);
+
+    const actuallyAdded: FrontierItem[] = [];
+    for (const f of frontier) {
+      const sig = `${f.node}|${f.cost}|${f.path.join("->")}`;
+      if (!beforeSigs.has(sig)) {
+        actuallyAdded.push(f);
+      }
+    }
+
+    const addedNodes = actuallyAdded.map((f) => f.node);
 
     steps.push({
       stepType: "add_to_frontier",
       currentNode,
-      visited: new Set(visited),
-      frontier: frontier
-        .slice()
-        .sort((a, b) => a.cost - b.cost)
-        .map((f) => f.node),
+      visited: new Set(closed),
+      frontier: afterSorted.map((f) => f.node),
       parent: {},
-      pathQueue: frontier
-        .slice()
-        .sort((a, b) => a.cost - b.cost)
-        .map((f) => f.path),
-      addedNodes: addedNeighbors,
+      pathQueue: afterSorted.map((f) => f.path),
+      addedNodes,
       description:
-        addedNeighbors.length === 0
-          ? `No new nodes added to frontier.`
-          : `Adding to frontier:\n${frontier
-              .filter((f) => addedNeighbors.includes(f.node))
-              .sort((a, b) => a.cost - b.cost)
+        actuallyAdded.length === 0
+          ? `No new nodes added to frontier${
+              validNeighbors.length === 0
+                ? useClosedSet
+                  ? " (all neighbors already in CLOSED)"
+                  : usePathLoopBreaking
+                  ? " (all neighbors already in current path)"
+                  : ""
+                : ""
+            }.`
+          : `Added to frontier:\n${actuallyAdded
               .map((f) => `${f.path.join(" → ")} (cost: ${f.cost})`)
               .join(",\n")}`,
     });
+
+    if (earlyStop) {
+      const hit = actuallyAdded.find((f) => f.node === goalNode);
+      if (hit) {
+        steps.push({
+          stepType: "goal_found",
+          currentNode: hit.node,
+          visited: new Set(closed),
+          frontier: afterSorted.map((f) => f.node),
+          parent: {},
+          pathQueue: afterSorted.map((f) => f.path),
+          finalPath: hit.path,
+          description: `Goal ${goalNode} found in frontier! Path: ${hit.path.join(
+            " → "
+          )} (Total cost: ${hit.cost})`,
+        });
+        return steps;
+      }
+    }
   }
 
   if (stepCounter >= MAX_STEPS) {
     steps.push({
       stepType: "error",
       currentNode: "",
-      visited: new Set(visited),
+      visited: new Set(closed),
       frontier: [],
       parent: {},
       pathQueue: [],
@@ -259,7 +284,7 @@ function executeUCS(
     steps.push({
       stepType: "add_to_frontier",
       currentNode: "",
-      visited: new Set(visited),
+      visited: new Set(closed),
       frontier: [],
       parent: {},
       pathQueue: [],
@@ -274,7 +299,7 @@ function executeUCS(
 export const UCS: Algorithm = {
   id: "ucs",
   name: "Uniform Cost Search",
-  description: "Expands the node with the lowest cumulative path cost.",
+  description: "Expands the path with the lowest cumulative cost (g).",
   execute: (
     adjList,
     start,
