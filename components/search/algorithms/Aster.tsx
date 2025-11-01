@@ -51,7 +51,7 @@ function executeAStar(
   const parent: Record<string, string> = {};
   const gScore: Record<string, number> = { [startNode]: 0 };
 
-  // Heuristics en kosten
+  // Heuristics and costs
   const heuristics = graphs[graphId]?.heuristics ?? {};
   const heuristic = (node: string) => heuristics[node] ?? Infinity;
 
@@ -70,17 +70,45 @@ function executeAStar(
     h: number;
   };
 
-  const frontier: FrontierItem[] = [
+  const sortFrontierByF = (arr: FrontierItem[]) =>
+    arr.slice().sort((a, b) => a.g + a.h - (b.g + b.h));
+
+  const getPathQueue = () => sortFrontierByF(frontier).map((f) => f.path);
+
+  const repairFrontier = (arr: FrontierItem[]) => {
+    const bestGPerNode: Record<string, number> = {};
+    for (const item of arr) {
+      if (
+        bestGPerNode[item.node] === undefined ||
+        item.g < bestGPerNode[item.node]
+      ) {
+        bestGPerNode[item.node] = item.g;
+      }
+    }
+
+    const repaired: FrontierItem[] = [];
+    const removed: FrontierItem[] = [];
+
+    for (const item of arr) {
+      const bestG = bestGPerNode[item.node];
+      if (item.g === bestG) {
+        if (!repaired.find((keep) => keep.node === item.node)) {
+          repaired.push(item);
+        } else {
+          removed.push(item);
+        }
+      } else {
+        removed.push(item);
+      }
+    }
+
+    return { repaired, removed };
+  };
+
+  let frontier: FrontierItem[] = [
     { node: startNode, path: [startNode], g: 0, h: heuristic(startNode) },
   ];
 
-  const getPathQueue = () =>
-    frontier
-      .slice()
-      .sort((a, b) => a.g + a.h - (b.g + b.h))
-      .map((f) => f.path);
-
-  // Start step
   steps.push({
     stepType: "start",
     currentNode: startNode,
@@ -88,7 +116,7 @@ function executeAStar(
     frontier: [startNode],
     parent: {},
     pathQueue: [[startNode]],
-    description: `Start A* from ${startNode}. Goal: ${goalNode}`,
+    description: `Start A* from ${startNode}. Goal: ${goalNode}.`,
   });
 
   let stepCounter = 0;
@@ -97,7 +125,7 @@ function executeAStar(
   while (frontier.length > 0 && stepCounter < MAX_STEPS) {
     stepCounter++;
 
-    frontier.sort((a, b) => a.g + a.h - (b.g + b.h));
+    frontier = sortFrontierByF(frontier);
     const {
       node: currentNode,
       path: currentPath,
@@ -113,7 +141,7 @@ function executeAStar(
         frontier: frontier.map((f) => f.node),
         parent: { ...parent },
         pathQueue: getPathQueue(),
-        description: `Skipping ${currentNode} — already in CLOSED set.`,
+        description: `Skip ${currentNode} because it is already in the CLOSED set.`,
       });
       continue;
     }
@@ -135,9 +163,9 @@ function executeAStar(
               to: currentNode,
             }
           : undefined,
-      description: `Taking node ${currentNode} with lowest f(n)=g+h: ${currentPath.join(
+      description: `Expanding ${currentNode} with lowest f(n)=g+h along path ${currentPath.join(
         " → "
-      )} (g: ${gCost}, h: ${hCost}, f: ${gCost + hCost})`,
+      )} (g=${gCost}, h=${hCost}, f=${gCost + hCost}).`,
     });
 
     if (currentNode === goalNode) {
@@ -149,9 +177,9 @@ function executeAStar(
         parent: { ...parent },
         finalPath: currentPath,
         pathQueue: [],
-        description: `Goal ${goalNode} found! Final path: ${currentPath.join(
+        description: `Reached goal ${goalNode}. Final path: ${currentPath.join(
           " → "
-        )} (Total cost g: ${gCost})`,
+        )} (total cost g=${gCost}).`,
       });
       return steps;
     }
@@ -160,6 +188,7 @@ function executeAStar(
       currentNode,
       adjList[currentNode] || []
     );
+
     steps.push({
       stepType: "highlight_edges",
       currentNode,
@@ -173,47 +202,44 @@ function executeAStar(
       })),
       description: `Exploring neighbors of ${currentNode}: ${orderedNeighbors.join(
         ", "
-      )}`,
+      )}.`,
     });
 
-    const addedNeighbors: string[] = [];
+    const newPathsThisIteration: FrontierItem[] = [];
 
     for (const neighbor of orderedNeighbors) {
       if (useClosedSet && visited.has(neighbor)) continue;
 
       const tentativeG = gCost + getCost(currentNode, neighbor);
-      const existing = frontier.find((f) => f.node === neighbor);
+      const newPath = [...currentPath, neighbor];
+      const newH = heuristic(neighbor);
 
-      if (!existing || tentativeG < existing.g) {
-        parent[neighbor] = currentNode;
-        gScore[neighbor] = tentativeG;
+      const newItem: FrontierItem = {
+        node: neighbor,
+        path: newPath,
+        g: tentativeG,
+        h: newH,
+      };
 
-        const newPath = [...currentPath, neighbor];
-        const newH = heuristic(neighbor);
+      parent[neighbor] = currentNode;
+      gScore[neighbor] = tentativeG;
+      frontier.push(newItem);
+      newPathsThisIteration.push(newItem);
 
-        frontier.push({
-          node: neighbor,
-          path: newPath,
-          g: tentativeG,
-          h: newH,
+      if (earlyStop && neighbor === goalNode) {
+        steps.push({
+          stepType: "goal_found",
+          currentNode: neighbor,
+          visited: new Set(visited),
+          frontier: [],
+          parent: { ...parent },
+          finalPath: newPath,
+          pathQueue: [],
+          description: `Reached goal ${goalNode} early. Path: ${newPath.join(
+            " → "
+          )} (g=${tentativeG}, h=${newH}).`,
         });
-        addedNeighbors.push(neighbor);
-
-        if (earlyStop && neighbor === goalNode) {
-          steps.push({
-            stepType: "goal_found",
-            currentNode: neighbor,
-            visited: new Set(visited),
-            frontier: [],
-            parent: { ...parent },
-            finalPath: newPath,
-            pathQueue: [],
-            description: `Goal ${goalNode} found early. Path: ${newPath.join(
-              " → "
-            )} (g: ${tentativeG}, h: ${newH})`,
-          });
-          return steps;
-        }
+        return steps;
       }
     }
 
@@ -221,27 +247,49 @@ function executeAStar(
       stepType: "add_to_frontier",
       currentNode,
       visited: new Set(visited),
-      frontier: frontier
-        .slice()
-        .sort((a, b) => a.g + a.h - (b.g + b.h))
-        .map((f) => f.node),
+      frontier: sortFrontierByF(frontier).map((f) => f.node),
       parent: { ...parent },
       pathQueue: getPathQueue(),
-      addedNodes: addedNeighbors,
+      addedNodes: newPathsThisIteration.map((f) => f.node),
       description:
-        addedNeighbors.length === 0
-          ? `No new nodes added to frontier.`
-          : `Added to frontier:\n${frontier
-              .filter((f) => addedNeighbors.includes(f.node))
-              .sort((a, b) => a.g + a.h - (b.g + b.h))
+        newPathsThisIteration.length === 0
+          ? `No new paths to add to the frontier.`
+          : `Added to frontier:\n${newPathsThisIteration
               .map(
                 (f) =>
-                  `${f.path.join(" → ")} (g: ${f.g}, h: ${f.h}, f: ${
-                    f.g + f.h
-                  })`
+                  `${f.path.join(" → ")} (g=${f.g}, h=${f.h}, f=${f.g + f.h})`
               )
-              .join(",\n")}`,
+              .join("\n")}`,
     });
+
+    const { repaired, removed } = repairFrontier(frontier);
+    frontier = repaired;
+
+    if (removed.length > 0) {
+      const shortMessages = removed.map(
+        (item) =>
+          `Frontier repair: we prune dominated paths so that for each node we only keep the cheapest path (lowest g). Deleted ${item.path.join(
+            " → "
+          )} from frontier.`
+      );
+
+      steps.push({
+        stepType: "frontier_repair",
+        currentNode,
+        visited: new Set(visited),
+        frontier: sortFrontierByF(frontier).map((f) => f.node),
+        parent: { ...parent },
+        pathQueue: getPathQueue(),
+        removedPaths: removed.map((f) => ({
+          node: f.node,
+          path: f.path,
+          g: f.g,
+          h: f.h,
+          fScore: f.g + f.h,
+        })),
+        description: shortMessages.join(" "),
+      });
+    }
   }
 
   if (stepCounter >= MAX_STEPS) {
@@ -252,7 +300,7 @@ function executeAStar(
       frontier: [],
       parent: {},
       pathQueue: [],
-      description: `Search stopped after ${MAX_STEPS} steps to prevent infinite loop.`,
+      description: `Search aborted after ${MAX_STEPS} steps to avoid an infinite loop.`,
     });
   } else {
     steps.push({
@@ -263,7 +311,7 @@ function executeAStar(
       parent: {},
       pathQueue: [],
       addedNodes: [],
-      description: `No path to goal found.`,
+      description: `No path to the goal was found.`,
     });
   }
 
@@ -273,7 +321,8 @@ function executeAStar(
 export const AStar: Algorithm = {
   id: "astar",
   name: "A* Search",
-  description: "Search using f(n) = g(n) + h(n) with mandatory CLOSED set.",
+  description:
+    "Search using f(n) = g(n) + h(n) with a mandatory CLOSED set and frontier repair (dominated path pruning).",
   execute: (
     adjList,
     start,
